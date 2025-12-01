@@ -238,27 +238,19 @@ def main():
 
                 if not img_path:
                     continue
-                vision_time_start = time.time()
-                raw_text = extract_text_with_google_vision(frame) or "No text detected"
-                print(raw_text)
-                vision_time_end = time.time()
-                print(f"Time taken by Google Vision API: {vision_time_end - vision_time_start}")
+                # vision_time_start = time.time()
+                # raw_text = extract_text_with_google_vision(frame) or "No text detected"
+                # print(raw_text)
+                # vision_time_end = time.time()
+                # print(f"Time taken by Google Vision API: {vision_time_end - vision_time_start}")
 
                 refinement_prompt = f"""
-                    Context: The text in "Extracted text" is the raw output from Google Vision API's detection on the image provided below. 
-
-                    Extracted text:
-                    {raw_text}
-
-                    Task: Review the Vision API's detections in light of the actual visual evidence in the image. 
-                    Your final output MUST be a single, natural-sounding, corrected, and comprehensive textual paragraph. 
-                    Integrate all verified Vision detections and describe the content. 
-                    If the image contains text (like from a book), include the complete, unsummarized text content. 
-                    Enclose all direct text snippets or full text blocks within standard single quotation marks ('').
-                    NEVER use the backslash character to enclose or separate text, quotes, or snippets. 
+                    Task: Act as a better version of the Google Vision OCR.
+                    If the image contains text (like from a book), include the complete, UNSUMMARIZED text content. 
+                    Integrate all verified Vision detections and describe the content.
                     Summarize only contextual elements like book title, chapter, or page numbers separately from the quoted text. 
-                    If the content is medical, issue a clear alarm. If no text is found by the Vision API, say "NO TEXT FOUND" and SUMMARIZE the visual WITHOUT mentioning the absence of text (25 WORDS ONLY).
-                    Do NOT use headers, bullet points, or lists in your final response. NEVER mention Google Vision API.
+                    If the content is medical, issue a clear alarm. If no text is found, say "NO TEXT FOUND" and SUMMARIZE the visual (25 WORDS ONLY).
+                    Do NOT use headers, bullet points, or lists in your final response.
                     """
                 gemini_time_start = time.time()
                 refined = refine_text_with_gemini_and_image(refinement_prompt, img_path)
