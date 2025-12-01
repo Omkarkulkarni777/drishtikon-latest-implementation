@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import datetime
+import simpleaudio as sa
 from dotenv import load_dotenv
 
 ############################################################
@@ -23,10 +24,10 @@ genai.configure(api_key=GEMINI_API_KEY)
 #                 GOOGLE CREDENTIALS
 ############################################################
 STT_TTS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    r"cred\imperial-glyph-448202-p6-d36e2b69bd92.json"
+    "cred/imperial-glyph-448202-p6-d36e2b69bd92.json"
 )
 VISION_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    r"cred\vision-key.json"
+    "cred/vision-key.json"
 )
 
 ############################################################
@@ -45,13 +46,9 @@ vision_client = vision.ImageAnnotatorClient(credentials=VISION_CREDENTIALS)
 
 
 ############################################################
-#                 TEXT TO SPEECH (NO SUBPROCESS)
+#                 TEXT TO SPEECH (LINUX+RPi SAFE)
 ############################################################
 def speak(text):
-    """
-    Convert text to speech and play it using pure Python.
-    No subprocess, no external calls.
-    """
     synthesis_input = texttospeech.SynthesisInput(text=text)
 
     voice = texttospeech.VoiceSelectionParams(
@@ -75,28 +72,39 @@ def speak(text):
     with open(audio_path, "wb") as out:
         out.write(response.audio_content)
 
-    # Playback using Media.SoundPlayer through ctypes (no subprocess)
     try:
-        import winsound
-        winsound.PlaySound(audio_path, winsound.SND_FILENAME)
-    except Exception:
-        pass
+        wave_obj = sa.WaveObject.from_wave_file(audio_path)
+        play_obj = wave_obj.play()
+        play_obj.wait_done()
+    except Exception as e:
+        print("Audio playback error:", e)
 
 
 ############################################################
-#                 SPEECH INPUT (DISCONNECTED)
+#               FILE CHOOSER (NO CAMERA)
 ############################################################
-def listen():
-    """Placeholder STT function — currently returns None (intentionally)."""
-    return None
+def choose_file():
+    root = tk.Tk()
+    root.withdraw()
+
+    filepath = filedialog.askopenfilename(
+        initialdir="images",
+        title="Select an image file",
+        filetypes=(
+            ("Image Files", "*.jpg *.jpeg *.png *.bmp *.webp"),
+            ("All files", "*.*"),
+        ),
+    )
+    root.destroy()
+    return filepath
 
 
 ############################################################
 #               GOOGLE VISION OCR
 ############################################################
-def extract_text_with_google_vision(image_bgr):
-    """Runs Google Cloud Vision OCR on a BGR OpenCV image."""
-    success, encoded_image = cv2.imencode(".jpg", image_bgr)
+def extract_text_with_google_vision(image_path):
+    img = cv2.imread(image_path)
+    success, encoded_image = cv2.imencode(".jpg", img)
     if not success:
         return ""
 
@@ -115,135 +123,40 @@ def extract_text_with_google_vision(image_bgr):
 #              GEMINI MULTIMODAL CORRECTION
 ############################################################
 def refine_text_with_gemini_and_image(prompt_text, image_path):
-    """Sends both text + image to Gemini for enhanced correction."""
     if not GEMINI_API_KEY or not GEMINI_MODEL:
-        print("Gemini not configured. Returning raw text.")
         return prompt_text
 
-    try:
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
-    except Exception as e:
-        print("Could not read image for Gemini:", e)
-        return prompt_text
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
 
-    mime_type = get_mime_type(image_path)
+    mime_type = "image/jpeg"
 
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
-
         res = model.generate_content([
             {"mime_type": mime_type, "data": image_bytes},
             prompt_text,
         ])
+        return getattr(res, "text", prompt_text)
 
-        text = getattr(res, "text", None)
-        return text or prompt_text
-
-    except Exception as err:
-        print("Gemini error:", err)
+    except Exception:
         return prompt_text
-
-
-def get_mime_type(path):
-    ext = path.lower().split(".")[-1]
-    mapping = {
-        "jpg": "image/jpeg",
-        "jpeg": "image/jpeg",
-        "png": "image/png",
-        "gif": "image/gif",
-        "webp": "image/webp",
-        "bmp": "image/bmp",
-    }
-    return mapping.get(ext, "image/jpeg")
-
-
-############################################################
-#               FILE CHOOSER (GUI)
-############################################################
-def choose_file():
-    root = tk.Tk()
-    root.withdraw()
-    filepath = filedialog.askopenfilename(
-        initialdir="images",
-        title="Select an image file",
-        filetypes=(
-            ("Image Files", "*.jpg *.jpeg *.png *.bmp *.webp"),
-            ("All files", "*.*"),
-        ),
-    )
-    root.destroy()
-    return filepath
-
-
-############################################################
-#                IMAGE CAPTURE
-############################################################
-def capture_image_on_space():
-    """
-    Opens webcam feed and captures a single frame on SPACE.
-    """
-    cam = cv2.VideoCapture(0)
-
-    if not cam.isOpened():
-        speak("Camera not found.")
-        return None, None
-
-    img_counter = 0
-    temp_image_path = None
-
-    while True:
-        ret, frame = cam.read()
-        if not ret:
-            speak("Camera disconnected.")
-            break
-
-        cv2.imshow("Press SPACE to capture, Q to quit", frame)
-        k = cv2.waitKey(1)
-
-        if k == 32:  # SPACE
-            temp_image_path = f"captured_{img_counter}.png"
-            cv2.imwrite(temp_image_path, frame)
-            break
-
-        elif k == ord('q'):
-            break
-
-    cam.release()
-    cv2.destroyAllWindows()
-
-    return temp_image_path, frame
 
 
 ############################################################
 #                      MAIN LOGIC
 ############################################################
 def main():
-    """
-    This version is dedicated to Vision + Gemini ONLY.
-    No subprocess calls.
-    """
-    speak("Welcome! This module handles reading text and refining content.")
+    speak("Welcome! Select an image file for text extraction.")
 
-    response = listen() or "read"
+    img_path = choose_file()
+    if not img_path:
+        speak("No image selected.")
+        return
 
-    if "read" in response:
-        speak("Place the material in front of the camera and say 'click a picture'.")
+    raw_text = extract_text_with_google_vision(img_path)
 
-        while True:
-            command = listen() or "click a picture"
-
-            if "click" in command:
-                img_path, frame = capture_image_on_space()
-
-                if not img_path:
-                    continue
-                vision_time_start = time.time()
-                raw_text = extract_text_with_google_vision(frame) or "No text detected"
-                vision_time_end = time.time()
-                print(f"Time taken by Google Vision API: {vision_time_end - vision_time_start}")
-
-                refinement_prompt = f"""
+    refinement_prompt = f"""
                     Context: The text in "Extracted text" is the raw output from Google Vision API's detection on the image provided below. 
 
                     Extracted text:
@@ -259,25 +172,11 @@ def main():
                     If the content is medical, issue a clear alarm. If no text is found by the Vision API, say "NO TEXT FOUND" and SUMMARIZE the visual WITHOUT mentioning the absence of text (25 WORDS ONLY).
                     Do NOT use headers, bullet points, or lists in your final response. NEVER mention Google Vision API.
                     """
-                gemini_time_start = time.time()
-                refined = refine_text_with_gemini_and_image(refinement_prompt, img_path)
-                gemini_time_end = time.time()
-                print(f"Time taken by Gemini API: {gemini_time_end - gemini_time_start}")
+    refined = refine_text_with_gemini_and_image(refinement_prompt, img_path)
 
-                speak(refined)
-                print("Refined OCR result:")
-                print(refined)
-
-                os.remove(img_path)
-                break
-
-            else:
-                speak("Say 'click a picture' when ready.")
-
-    else:
-        speak("This module now supports only OCR + Gemini refinement.")
+    speak(refined)
+    print("\nRefined OCR result:\n", refined)
 
 
-############################################################
 if __name__ == "__main__":
     main()

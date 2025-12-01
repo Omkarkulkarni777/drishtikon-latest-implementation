@@ -1,48 +1,73 @@
 import os
 import re
-import time
-cwd = os.getcwd()
-print(cwd)
-# count = 0
+import importlib.util
+import pkgutil
+# Usage:
+# Start with pip list > requirements.txt
+# Run the script using python3 codebase.py
+# This creates a requirements_safe.txt file
+# Finally, run mv requirements_safe.txt requirements after reviewing 
+# requirements_safe.txt
 
-def create_req(file):
-    with open(file, 'r') as fileObject:
-        lines = fileObject.readlines()
-        cleaned = "".join(lines).split('\n')[2:]
-        res_list = []
-        for line in cleaned:
-            res = ''
-            space_enc = False
-            for char in line:
-                if not char.strip():
-                    if not space_enc:
-                        res += "=="
-                    space_enc = True
-                    continue
-                res += char
-            res_list.append(res)
-    name, ext = os.path.splitext(file)
-    count = 0
-    outputFilepath = f'{name}{"_" * count}{ext}'
-    while os.path.exists(outputFilepath):
-        count += 1
-        outputFilepath = f'{name}{"_" * count}{ext}'
-        
-    with open(outputFilepath, 'a') as fileObj:
-        fileObj.writelines("\n".join(res_list))
 
-def listChildren(filepath):
-    for childFileBasename in os.listdir(path=filepath):
-        absolutePath = os.path.join(filepath, childFileBasename)
-        if os.path.isdir(absolutePath):
-            listChildren(absolutePath)
-            global count
-            count -= 1
+
+def is_native_package(package_name):
+    """
+    Returns True if the installed package contains native extensions (.so, .pyd, .dll)
+    Otherwise returns False.
+    """
+    try:
+        spec = importlib.util.find_spec(package_name)
+        if spec is None or not spec.submodule_search_locations:
+            return False
+
+        package_path = list(spec.submodule_search_locations)[0]
+
+        for root, dirs, files in os.walk(package_path):
+            for f in files:
+                if f.endswith((".so", ".pyd", ".dll", ".dylib", ".c", ".cpp")):
+                    return True
+        return False
+
+    except Exception:
+        # If not detectable, default to pure python (safe guess)
+        return False
+
+
+def create_safe_requirements(pip_list_file):
+    with open(pip_list_file, "r") as f:
+        lines = f.readlines()
+
+    # Skip the header (usually first 2 lines)
+    cleaned = "".join(lines).split("\n")[2:]
+
+    output = []
+
+    for line in cleaned:
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+
+        name, version = parts[0], parts[1]
+
+        # Determine if the package is native
+        if is_native_package(name):
+            output.append(name)  # leave unpinned
         else:
-            print(absolutePath)
-    count += 1
+            output.append(f"{name}=={version}")  # safe to pin
 
-# listChildren(cwd)
-create_req(os.path.join(cwd, "requirements.txt"))
-# print(count)
-        
+    # Write output to a new requirements file
+    name, ext = os.path.splitext(pip_list_file)
+    output_path = f"{name}_safe{ext}"
+
+    with open(output_path, "w") as f:
+        f.write("\n".join(output))
+
+    print(f"Created Raspberry Pi safe requirements file: {output_path}")
+
+
+# ---- RUN ----
+if __name__ == "__main__":
+    cwd = os.getcwd()
+    requirements_file = os.path.join(cwd, "requirements.txt")  # your pip list dump
+    create_safe_requirements(requirements_file)
