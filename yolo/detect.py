@@ -25,6 +25,11 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
+# COOLDOWN SETTINGS
+ENV_UPDATE_INTERVAL = 60  # seconds
+last_gemini_time = 0
+gemini_busy = False
+
 # --- GOOGLE TTS ---
 TTS_CREDENTIALS = service_account.Credentials.from_service_account_file(
     "cred/imperial-glyph-448202-p6-d36e2b69bd92.json"
@@ -112,30 +117,89 @@ def describe_yolo(boxes, names):
 
     return "I can see " + ", ".join(parts) + "."
 
+# =============================================
+# POSITIONAL INFORMATION ASSISTANCE
+# =============================================
+
+def positional_descriptions(results):
+    """
+    Returns a description of object positions:
+    left / center / right in the image.
+    """
+
+    if len(results[0].boxes) == 0:
+        return "I do not see any objects."
+
+    boxes = results[0].boxes
+    names = results[0].names
+    width = results[0].orig_shape[1]
+
+    left_items = []
+    center_items = []
+    right_items = []
+
+    for box in boxes:
+        cls_idx = int(box.cls[0])
+        label = names[cls_idx]
+
+        xyxy = box.xyxy[0]  # [x1, y1, x2, y2]
+        x_center = float((xyxy[0] + xyxy[2]) / 2)
+
+        # LEFT
+        if x_center < width * 0.33:
+            left_items.append(label)
+
+        # RIGHT
+        elif x_center > width * 0.66:
+            right_items.append(label)
+
+        # CENTER
+        else:
+            center_items.append(label)
+
+    parts = []
+
+    if left_items:
+        parts.append("to the left I can see " + ", ".join(left_items))
+
+    if center_items:
+        parts.append("in the center there is " + ", ".join(center_items))
+
+    if right_items:
+        parts.append("to the right I can see " + ", ".join(right_items))
+
+    return ". ".join(parts) + "."
 
 ############################################################
 #                  GEMINI SCENE
 ############################################################
 
 def gemini_scene(path):
+    global gemini_busy
+    gemini_busy = True
+
     img = cv2.imread(path)
     success, encoded = cv2.imencode(".jpg", img)
     if not success:
         speak("Image encoding failed.")
+        gemini_busy = False
         return
 
     image_bytes = encoded.tobytes()
 
     model = genai.GenerativeModel(GEMINI_MODEL)
-
     prompt = "Describe the scene in 40 words."
 
-    res = model.generate_content(
-        [{"mime_type": "image/jpeg", "data": image_bytes}, prompt]
-    )
+    try:
+        res = model.generate_content(
+            [{"mime_type": "image/jpeg", "data": image_bytes}, prompt]
+        )
+        text = getattr(res, "text", "")
+        speak("Gemini summary: " + text)
+    except Exception as e:
+        print("Gemini ERROR:", e)
 
-    text = getattr(res, "text", "")
-    speak("Gemini summary: " + text)
+    gemini_busy = False
 
 
 ############################################################
@@ -143,7 +207,9 @@ def gemini_scene(path):
 ############################################################
 
 def main():
-    speak("Choose an image for object detection or analysis.")
+    global last_gemini_time
+
+    speak("Choose an image. Press Y for YOLO, G for Gemini, Q to quit.")
 
     fp = choose_file()
     if not fp:
@@ -152,21 +218,56 @@ def main():
 
     img = cv2.imread(fp)
 
-    # YOLO
-    results = model.predict(img, verbose=False)
-    annotated = results[0].plot()
-    classes = [box.cls[0] for box in results[0].boxes]
-    desc = describe_yolo(classes, results[0].names)
+    while True:
+        # Display (non-blocking)
+        cv2.imshow("AI Vision", img)
+        key = cv2.waitKey(1) & 0xFF
 
-    speak("YOLO result: " + desc)
+        # Quit
+        if key == ord('q'):
+            speak("Exiting vision module.")
+            break
 
-    cv2.imshow("YOLO Annotated", annotated)
-    cv2.waitKey(0)
+        # YOLO
+        if key == ord('y'):
+            results = model.predict(img, verbose=False)
+            annotated = results[0].plot()
+
+            # Convert RGB → BGR for OpenCV
+            annotated_bgr = cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR)
+
+            # Old description (object counts)
+            desc = describe_yolo([box.cls[0] for box in results[0].boxes], results[0].names)
+
+            # NEW positional description
+            pos_desc = positional_descriptions(results)
+
+            speak("YOLO result: " + desc + ". " + pos_desc)
+
+            cv2.imshow("AI Vision", annotated_bgr)
+            
+        # GEMINI
+        if key == ord('g'):
+            now = time.time()
+            cooldown = now - last_gemini_time
+
+            if gemini_busy:
+                print("Gemini is busy…")
+                continue
+
+            if cooldown < ENV_UPDATE_INTERVAL:
+                left = ENV_UPDATE_INTERVAL - cooldown
+                speak(f"Gemini cooling down. {int(left)} seconds remaining.")
+                continue
+
+            last_gemini_time = now
+            threading.Thread(
+                target=gemini_scene,
+                args=(fp,),
+                daemon=True
+            ).start()
+
     cv2.destroyAllWindows()
-
-    # Gemini
-    if GEMINI_API_KEY:
-        gemini_scene(fp)
 
 
 if __name__ == "__main__":
