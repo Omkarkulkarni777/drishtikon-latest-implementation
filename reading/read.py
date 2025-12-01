@@ -10,6 +10,7 @@ import time
 import datetime
 import simpleaudio as sa
 from dotenv import load_dotenv
+import time
 
 ############################################################
 #                 LOAD ENVIRONMENT
@@ -107,9 +108,12 @@ def extract_text_with_google_vision(image_path):
     success, encoded_image = cv2.imencode(".jpg", img)
     if not success:
         return ""
-
+        
+    vision_start_time = time.time()
     image = vision.Image(content=encoded_image.tobytes())
     response = vision_client.text_detection(image=image)
+    vision_end_time = time.time()
+    print("Time taken by Google Vision:", vision_end_time - vision_start_time)
 
     if response.error.message:
         print("Google Vision OCR Error:", response.error.message)
@@ -133,10 +137,13 @@ def refine_text_with_gemini_and_image(prompt_text, image_path):
 
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
+        gemini_start_time = time.time()
         res = model.generate_content([
             {"mime_type": mime_type, "data": image_bytes},
             prompt_text,
         ])
+        gemini_end_time = time.time()
+        print("Time taken by Gemini:", gemini_end_time - gemini_start_time)
         return getattr(res, "text", prompt_text)
 
     except Exception:
@@ -155,6 +162,7 @@ def main():
         return
 
     raw_text = extract_text_with_google_vision(img_path)
+    print("Raw text extracted by Google Vision:", raw_text)
 
     refinement_prompt = f"""
                     Context: The text in "Extracted text" is the raw output from Google Vision API's detection on the image provided below. 

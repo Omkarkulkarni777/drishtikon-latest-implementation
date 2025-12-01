@@ -184,7 +184,8 @@ def gemini_scene(path):
         speak("Image encoding failed.")
         gemini_busy = False
         return
-
+        
+    gemini_start_time = time.time()
     image_bytes = encoded.tobytes()
 
     model = genai.GenerativeModel(GEMINI_MODEL)
@@ -194,6 +195,8 @@ def gemini_scene(path):
         res = model.generate_content(
             [{"mime_type": "image/jpeg", "data": image_bytes}, prompt]
         )
+        gemini_end_time = time.time()
+        print("Time taken by Gemini:", gemini_end_time - gemini_start_time)
         text = getattr(res, "text", "")
         speak("Gemini summary: " + text)
     except Exception as e:
@@ -230,6 +233,7 @@ def main():
 
         # YOLO
         if key == ord('y'):
+            yolo_start_time = time.time()
             results = model.predict(img, verbose=False)
             annotated = results[0].plot()
 
@@ -241,7 +245,8 @@ def main():
 
             # NEW positional description
             pos_desc = positional_descriptions(results)
-
+            yolo_end_time = time.time()
+            print("Time taken by YOLO + positional information extraction:", yolo_end_time - yolo_start_time)
             speak("YOLO result: " + desc + ". " + pos_desc)
 
             cv2.imshow("AI Vision", annotated_bgr)
