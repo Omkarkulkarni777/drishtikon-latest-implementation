@@ -220,9 +220,12 @@ def main():
         return
 
     img = cv2.imread(fp)
-
+    height, width, channels = img.shape
     while True:
         # Display (non-blocking)
+        cv2.namedWindow("AI Vision", cv2.WINDOW_NORMAL)
+        
+        cv2.resizeWindow("AI Vision", 800, int(height * 800 / width))
         cv2.imshow("AI Vision", img)
         key = cv2.waitKey(1) & 0xFF
 
