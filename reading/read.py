@@ -133,8 +133,7 @@ def main():
 
     refinement_prompt = f"""
     Task: Act as a better version of the Google Vision OCR.
-    If the image contains text (like from a book), include the complete, UNSUMMARIZED text content. 
-    Integrate all verified Vision detections and describe the content.
+    If the image contains text (like from a book), include the complete, UNSUMMARIZED text content.
     Summarize only contextual elements like book title, chapter, or page numbers separately from the quoted text. 
     If the content is medical, issue a clear alarm.
     If no text is found, say "NO TEXT FOUND" and SUMMARIZE the visual (25 WORDS ONLY).
