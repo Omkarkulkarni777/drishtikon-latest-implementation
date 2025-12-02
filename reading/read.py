@@ -27,10 +27,6 @@ genai.configure(api_key=GEMINI_API_KEY)
 STT_TTS_CREDENTIALS = service_account.Credentials.from_service_account_file(
     "cred/imperial-glyph-448202-p6-d36e2b69bd92.json"
 )
-VISION_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    "cred/vision-key.json"
-)
-
 ############################################################
 #                 DIRECTORIES
 ############################################################
@@ -43,8 +39,6 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 ############################################################
 tts_client = texttospeech.TextToSpeechClient(credentials=STT_TTS_CREDENTIALS)
 stt_client = speech.SpeechClient(credentials=STT_TTS_CREDENTIALS)
-vision_client = vision.ImageAnnotatorClient(credentials=VISION_CREDENTIALS)
-
 
 ############################################################
 #                 TEXT TO SPEECH (LINUX+RPi SAFE)
@@ -99,30 +93,6 @@ def choose_file():
     root.destroy()
     return filepath
 
-
-############################################################
-#               GOOGLE VISION OCR
-############################################################
-def extract_text_with_google_vision(image_path):
-    img = cv2.imread(image_path)
-    success, encoded_image = cv2.imencode(".jpg", img)
-    if not success:
-        return ""
-        
-    vision_start_time = time.time()
-    image = vision.Image(content=encoded_image.tobytes())
-    response = vision_client.text_detection(image=image)
-    vision_end_time = time.time()
-    print("Time taken by Google Vision:", vision_end_time - vision_start_time)
-
-    if response.error.message:
-        print("Google Vision OCR Error:", response.error.message)
-        return ""
-
-    annotations = response.text_annotations
-    return annotations[0].description if annotations else ""
-
-
 ############################################################
 #              GEMINI MULTIMODAL CORRECTION
 ############################################################
@@ -161,25 +131,16 @@ def main():
         speak("No image selected.")
         return
 
-    raw_text = extract_text_with_google_vision(img_path)
-    print("Raw text extracted by Google Vision:", raw_text)
-
     refinement_prompt = f"""
-                    Context: The text in "Extracted text" is the raw output from Google Vision API's detection on the image provided below. 
-
-                    Extracted text:
-                    {raw_text}
-
-                    Task: Review the Vision API's detections in light of the actual visual evidence in the image. 
-                    Your final output MUST be a single, natural-sounding, corrected, and comprehensive textual paragraph. 
-                    Integrate all verified Vision detections and describe the content. 
-                    If the image contains text (like from a book), include the complete, unsummarized text content. 
-                    Enclose all direct text snippets or full text blocks within standard single quotation marks ('').
-                    NEVER use the backslash character to enclose or separate text, quotes, or snippets. 
-                    Summarize only contextual elements like book title, chapter, or page numbers separately from the quoted text. 
-                    If the content is medical, issue a clear alarm. If no text is found by the Vision API, say "NO TEXT FOUND" and SUMMARIZE the visual WITHOUT mentioning the absence of text (25 WORDS ONLY).
-                    Do NOT use headers, bullet points, or lists in your final response. NEVER mention Google Vision API.
-                    """
+    Task: Act as a better version of the Google Vision OCR.
+    If the image contains text (like from a book), include the complete, UNSUMMARIZED text content. 
+    Integrate all verified Vision detections and describe the content.
+    Summarize only contextual elements like book title, chapter, or page numbers separately from the quoted text. 
+    If the content is medical, issue a clear alarm.
+    If no text is found, say "NO TEXT FOUND" and SUMMARIZE the visual (25 WORDS ONLY).
+    Do NOT use headers, bullet points, or lists in your final response.
+    """
+    
     refined = refine_text_with_gemini_and_image(refinement_prompt, img_path)
 
     speak(refined)
