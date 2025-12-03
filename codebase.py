@@ -1,5 +1,4 @@
 import os
-import re
 
 def create_requirements(file):
     with open(file, 'r') as fileObject:
@@ -27,16 +26,20 @@ def create_requirements(file):
     with open(outputFilepath, 'a') as fileObj:
         fileObj.writelines("\n".join(res_list))
 
-def listChildren(filepath):
+def listChildren(filepath, fileCount=0, folderCount=0):
+    global count
     for childFileBasename in os.listdir(path=filepath):
         absolutePath = os.path.join(filepath, childFileBasename)
         if os.path.isdir(absolutePath):
-            listChildren(absolutePath)
-            global count
-            count -= 1
+            fileCount, folderCount = listChildren(absolutePath, fileCount, folderCount)
+            folderCount += 1
         else:
-            print(absolutePath)
-    count += 1
+            fileCount += 1
+        print(f'Count: {count}, Current file count: {fileCount}, Current folder count: {folderCount}, Path: {absolutePath}')
+        
+    return fileCount, folderCount
 
-import os
-create_requirements(os.path.join(os.getcwd(), 'requirements.txt'))
+if __name__ == "__main__":
+    create_requirements(os.path.join(os.getcwd(), 'requirements.txt'))
+    fileCount, folderCount = listChildren(os.path.join(os.getcwd(), 'reading'))
+    print(f'Total files: {fileCount}, Total folders: {folderCount}')
