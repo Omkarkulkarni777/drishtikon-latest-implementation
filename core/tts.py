@@ -1,7 +1,14 @@
+# core/tts.py
+# ================================================================
+#  GOOGLE CLOUD TEXT-TO-SPEECH (Commit 3)
+#  - Generates WAV files only
+#  - NO playback (no blocking)
+#  - Returns audio path for TTSPlayer to use later
+# ================================================================
+
 import os
 import time
 import datetime
-import platform
 from google.cloud import texttospeech
 from google.oauth2 import service_account
 
@@ -16,7 +23,6 @@ ensure_dir(AUDIO_DIR)
 
 # ================================================================
 #   GOOGLE CREDENTIALS
-#   Expected: /core/cred/tts-key.json  (must be a VALID service account)
 # ================================================================
 CRED_PATH = load_credential_path("core", "tts-key.json")
 
@@ -24,39 +30,34 @@ tts_client = None
 
 def init_tts():
     global tts_client
-
-    if not os.path.exists(CRED_PATH):
-        print(f"[TTS] ERROR: Credential file missing at: {CRED_PATH}")
-        return
-
     try:
         creds = service_account.Credentials.from_service_account_file(CRED_PATH)
         tts_client = texttospeech.TextToSpeechClient(credentials=creds)
-
+        print("[TTS] Google TTS initialized.")
     except Exception as e:
         print(f"[TTS] ERROR loading credentials: {e}")
         tts_client = None
 
-
 # Initialize on import
 init_tts()
 
-
 # ================================================================
-#   SPEAK FUNCTION
+#   SPEAK (Commit 3: generate audio only, no playback)
 # ================================================================
 def speak(text: str):
     """
-    Google Cloud TTS (with automatic fallback).
+    Convert text → speech using Google Cloud TTS.
+    Commit 3:
+        - DOES NOT PLAY AUDIO
+        - RETURNS the generated WAV file path
     """
 
     if not tts_client:
-        print("[TTS] Not initialized — speaking disabled.")
-        return
+        print("[TTS] Client not initialized.")
+        return None
 
     t0 = time.time()
 
-    # Config
     synthesis_input = texttospeech.SynthesisInput(text=text)
 
     voice = texttospeech.VoiceSelectionParams(
@@ -68,41 +69,29 @@ def speak(text: str):
         audio_encoding=texttospeech.AudioEncoding.LINEAR16
     )
 
-    # Generate speech
     try:
         response = tts_client.synthesize_speech(
             input=synthesis_input,
             voice=voice,
-            audio_config=audio_config
+            audio_config=audio_config,
         )
     except Exception as e:
         log("TTS", "-", f"TTS ERROR: {e}")
-        print(f"[TTS] Cloud TTS Error → {e}")
-        return
+        return None
 
-    # Save WAV
+    # Generate output file path
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    out_path = absolute_path("results", "audio_outputs", f"tts_{ts}.wav")
+    audio_path = absolute_path("results", "audio_outputs", f"tts_{ts}.wav")
 
     try:
-        with open(out_path, "wb") as f:
+        with open(audio_path, "wb") as f:
             f.write(response.audio_content)
     except Exception as e:
-        log("TTS", "-", f"WRITE ERROR: {e}")
-        print(f"[TTS] Could not write WAV: {e}")
-        return
-
-    # Play sound — OS-dependent
-    try:
-        if platform.system() == "Windows":
-            import winsound
-            winsound.PlaySound(out_path, winsound.SND_FILENAME)
-        elif platform.system() == "Linux":
-            os.system(f"aplay '{out_path}' >/dev/null 2>&1")
-        elif platform.system() == "Darwin":  # macOS
-            os.system(f"afplay '{out_path}'")
-    except Exception as e:
-        print(f"[TTS] Playback error: {e}")
+        log("TTS", "-", f"File write error: {e}")
+        return None
 
     t1 = time.time()
-    log("TTS", out_path, f"Played {len(text)} chars", round(t1 - t0, 2))
+    log("TTS", audio_path, f"Generated {len(text)} chars", round(t1 - t0, 2))
+
+    # ❗RETURN THE AUDIO FILE PATH (Commit 3 change)
+    return audio_path
