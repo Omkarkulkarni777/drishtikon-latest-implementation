@@ -20,9 +20,10 @@ import google.generativeai as genai
 
 from core.utils import absolute_path, ensure_dir, load_credential_path
 from core.tts import speak
-from core.tts_player import tts_main
+from core.tts_player import tts_main, tts_summary
 from core.logger import log
 from core.text_utils import split_into_sentences
+from core.summarize import summarize
 
 load_dotenv()
 
@@ -225,16 +226,15 @@ def main():
     print("\n=======================\n")
 
     # ================================================================
-    # Commit 8.6: Pause / Resume / Quit support for chunk reading
+    # Chunk-based reading with pause + summary (Commit 8.7)
     # ================================================================
-
     sentences = split_into_sentences(text)
 
     if not sentences:
         speak("I could not extract readable sentences from this page.")
         return
 
-    print("\n===== CHUNKED READING WITH PAUSE SUPPORT =====\n")
+    print("\n===== CHUNKED READING WITH PAUSE & SUMMARY =====\n")
 
     read_so_far = []
     current_index = 0
@@ -244,41 +244,121 @@ def main():
         sentence = sentences[current_index]
         print(f"[READ] Sentence {current_index+1}/{len(sentences)}: {sentence}")
 
-        # Generate audio for this chunk
         audio_path = speak(sentence)
-
-        # Start playback
         tts_main.play(audio_path)
 
-        # --- CHUNK PLAYBACK LOOP WITH PAUSE/RESUME/QUIT ---
+        # --- MAIN PLAYBACK LOOP WITH PAUSE/RESUME/SUMMARY/QUIT ---
         while True:
 
-            # If finished naturally → exit inner loop
+            # Finished this chunk naturally
             if not tts_main.is_playing():
                 break
 
-            # Check for user input (non-blocking)
+            # Non-blocking input
             if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+
                 key = sys.stdin.readline().strip().lower()
 
-                # Pause playback
+                # ------------------------------------------------
+                # PAUSE MAIN READING
+                # ------------------------------------------------
                 if key == "p":
                     print("[PAUSE] Paused reading")
                     tts_main.pause()
 
-                # Resume playback
+                    # PAUSE MENU LOOP
+                    while True:
+                        print("\nPaused. Options:")
+                        print("  r = resume reading")
+                        print("  m = summarize what has been read so far")
+                        print("  q = quit reading module")
+
+                        choice = sys.stdin.readline().strip().lower()
+
+                        # ---------------------------
+                        # RESUME MAIN READING
+                        # ---------------------------
+                        if choice == "r":
+                            print("[RESUME] Resuming reading")
+                            tts_main.resume()
+                            break  # back to reading loop
+
+                        # ---------------------------
+                        # QUIT MODULE
+                        # ---------------------------
+                        elif choice == "q":
+                            print("[QUIT] Exiting module...")
+                            tts_main.stop()
+                            return
+
+                        # ---------------------------
+                        # SUMMARY MODE
+                        # ---------------------------
+                        elif choice == "m":
+                            print("[SUMMARY] Generating summary...")
+
+                            summary_input = " ".join(read_so_far)
+
+                            if not summary_input.strip():
+                                print("[SUMMARY] Nothing read yet.")
+                                continue
+
+                            # Summarize to one-fourth length
+                            summary_text = summarize(summary_input)
+                            print("\n[SUMMARY OUTPUT]\n")
+                            print(summary_text)
+                            print("-----------------------------------------")
+
+                            # Convert summary to audio
+                            summary_audio = speak(summary_text)
+
+                            # Play using summary TTS engine
+                            tts_summary.play(summary_audio)
+
+                            print("\nSummary Mode:")
+                            print("  s = stop summary and return to pause menu")
+
+                            # SUMMARY MODE LOOP
+                            while True:
+
+                                # Summary finished naturally
+                                if not tts_summary.is_playing():
+                                    print("[SUMMARY] Finished.")
+                                    break
+
+                                # User input during summary
+                                if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                                    subkey = sys.stdin.readline().strip().lower()
+
+                                    if subkey == "s":
+                                        print("[SUMMARY] Stopped summary.")
+                                        tts_summary.stop()
+                                        break
+
+                                time.sleep(0.05)
+
+                            print("\nBack to pause menu.")
+                            # go back to pause menu automatically
+
+                        else:
+                            print("Invalid choice.")
+
+                # ------------------------------------------------
+                # RESUME shortcut (works mid-playback)
+                # ------------------------------------------------
                 elif key == "r":
                     print("[RESUME] Resuming")
                     tts_main.resume()
 
-                # Quit reading
+                # ------------------------------------------------
+                # QUIT MODULE
+                # ------------------------------------------------
                 elif key == "q":
                     print("[QUIT] Stopping reading module")
                     tts_main.stop()
                     return
 
             time.sleep(0.05)
-        # ---------------------------------------------------
 
         # Finished this sentence
         read_so_far.append(sentence)
