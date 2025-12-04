@@ -19,7 +19,7 @@ import google.generativeai as genai
 
 from core.utils import absolute_path, ensure_dir, load_credential_path
 from core.tts import speak
-from core.tts_player import tts
+from core.tts_player import tts_main
 from core.logger import log
 
 load_dotenv()
@@ -148,7 +148,7 @@ def capture_image():
     if cam.isOpened():
         prompt_path = speak("Press SPACE to capture, ESC to exit.")
         if prompt_path:
-            tts.play(prompt_path)
+            tts_main.play(prompt_path)
 
         while True:
             ret, frame = cam.read()
@@ -175,7 +175,7 @@ def capture_image():
     # If OpenCV fails → fallback to libcamera
     prompt_path = speak("Switching to Raspberry Pi camera mode.")
     if prompt_path:
-        tts.play(prompt_path)
+        tts_main.play(prompt_path)
 
     return capture_with_libcamera()
 
@@ -189,20 +189,20 @@ def main():
     # Prompt: select file
     prompt_path = speak("Select an image file. If you cancel, I will open the camera.")
     if prompt_path:
-        tts.play(prompt_path)
+        tts_main.play(prompt_path)
 
     img_path = choose_file()
 
     if not img_path:
         prompt_path = speak("No file selected. Opening camera.")
         if prompt_path:
-            tts.play(prompt_path)
+            tts_main.play(prompt_path)
         img_path = capture_image()
 
     if not img_path:
         prompt_path = speak("No image captured. Exiting.")
         if prompt_path:
-            tts.play(prompt_path)
+            tts_main.play(prompt_path)
         return
 
     refinement_prompt = """
@@ -213,7 +213,7 @@ def main():
 
     prompt_path = speak("Processing the image. Please wait.")
     if prompt_path:
-        tts.play(prompt_path)
+        tts_main.play(prompt_path)
 
     text, duration = gemini_read(img_path, refinement_prompt)
     log("READING", img_path, f"{len(text)} chars", duration)
@@ -222,13 +222,13 @@ def main():
     print(text)
     print("\n=======================\n")
 
-    # Generate TTS audio for the extracted text
+    # Generate _main audio for the extracted text
     audio_path = speak(text)
     if not audio_path:
         print("[READ] No audio path returned.")
         return
 
-    tts.play(audio_path)
+    tts_main.play(audio_path)
 
     # ============================================================
     #  Basic terminal controls for pausing / resuming / stopping
@@ -243,16 +243,16 @@ def main():
 
         if cmd == "p":
             print("[READ] Pausing playback.")
-            tts.pause()
+            tts_main.pause()
 
         elif cmd == "r":
             print("[READ] Resuming playback.")
-            tts.resume()
+            tts_main.resume()
 
 
         elif cmd == "q":
             print("[READ] Quitting reading module.")
-            tts.stop()
+            tts_main.stop()
             break
 
         else:
