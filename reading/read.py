@@ -19,6 +19,7 @@ import google.generativeai as genai
 
 from core.utils import absolute_path, ensure_dir, load_credential_path
 from core.tts import speak
+from core.tts_player import tts
 from core.logger import log
 
 load_dotenv()
@@ -47,6 +48,9 @@ def ensure_results_dir():
 # IMAGE OPTIMIZATION
 # ================================================================
 def optimize_image(image_path):
+    """
+    Resize + compress image for faster Gemini processing.
+    """
     img = Image.open(image_path)
 
     if img.mode == "RGBA":
@@ -61,10 +65,12 @@ def optimize_image(image_path):
 
 
 # ================================================================
-# GEMINI OCR + SUMMARIZATION
+# GEMINI OCR
 # ================================================================
 def gemini_read(image_path, prompt):
-
+    """
+    Run Gemini OCR + prompt on the image.
+    """
     if not GEMINI_API_KEY or not GEMINI_MODEL:
         return "Gemini not configured.", 0
 
@@ -77,9 +83,9 @@ def gemini_read(image_path, prompt):
     response = model.generate_content(
         [
             {"mime_type": "image/jpeg", "data": optimized_bytes},
-            prompt
+            prompt,
         ],
-        stream=True
+        stream=True,
     )
 
     for chunk in response:
@@ -102,8 +108,8 @@ def choose_file():
         title="Select an image file",
         filetypes=[
             ("Image Files", "*.jpg *.jpeg *.png *.bmp *.webp"),
-            ("All Files", "*.*")
-        ]
+            ("All Files", "*.*"),
+        ],
     )
     root.destroy()
 
@@ -140,7 +146,9 @@ def capture_image():
     cam = cv2.VideoCapture(0)
 
     if cam.isOpened():
-        speak("Press SPACE to capture, ESC to exit.")
+        prompt_path = speak("Press SPACE to capture, ESC to exit.")
+        if prompt_path:
+            tts.play(prompt_path)
 
         while True:
             ret, frame = cam.read()
@@ -165,7 +173,10 @@ def capture_image():
         cv2.destroyAllWindows()
 
     # If OpenCV fails → fallback to libcamera
-    speak("Switching to Raspberry Pi camera mode.")
+    prompt_path = speak("Switching to Raspberry Pi camera mode.")
+    if prompt_path:
+        tts.play(prompt_path)
+
     return capture_with_libcamera()
 
 
@@ -174,16 +185,24 @@ def capture_image():
 # ================================================================
 def main():
     ensure_results_dir()
-    speak("Select an image file. If you cancel, I will open the camera.")
+
+    # Prompt: select file
+    prompt_path = speak("Select an image file. If you cancel, I will open the camera.")
+    if prompt_path:
+        tts.play(prompt_path)
 
     img_path = choose_file()
 
     if not img_path:
-        speak("No file selected. Opening camera.")
+        prompt_path = speak("No file selected. Opening camera.")
+        if prompt_path:
+            tts.play(prompt_path)
         img_path = capture_image()
 
     if not img_path:
-        speak("No image captured. Exiting.")
+        prompt_path = speak("No image captured. Exiting.")
+        if prompt_path:
+            tts.play(prompt_path)
         return
 
     refinement_prompt = """
@@ -192,7 +211,9 @@ def main():
     Do not paraphrase or modify anything.
     """
 
-    speak("Processing the image. Please wait.")
+    prompt_path = speak("Processing the image. Please wait.")
+    if prompt_path:
+        tts.play(prompt_path)
 
     text, duration = gemini_read(img_path, refinement_prompt)
     log("READING", img_path, f"{len(text)} chars", duration)
@@ -201,7 +222,41 @@ def main():
     print(text)
     print("\n=======================\n")
 
-    speak(text)
+    # Generate TTS audio for the extracted text
+    audio_path = speak(text)
+    if not audio_path:
+        print("[READ] No audio path returned.")
+        return
+
+    tts.play(audio_path)
+
+    # ============================================================
+    #  Basic terminal controls for pausing / resuming / stopping
+    # ============================================================
+    print("[READ] Controls:")
+    print("   p = Pause")
+    print("   r = Resume")
+    print("   q = Quit reading module")
+
+    while True:
+        cmd = input("[READ] Command (p/r/q): ").strip().lower()
+
+        if cmd == "p":
+            print("[READ] Pausing playback.")
+            tts.pause()
+
+        elif cmd == "r":
+            print("[READ] Resuming playback.")
+            tts.resume()
+
+
+        elif cmd == "q":
+            print("[READ] Quitting reading module.")
+            tts.stop()
+            break
+
+        else:
+            print("[READ] Unknown command. Use p/r/s/q.")
 
 
 # ================================================================
