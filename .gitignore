@@ -12,4 +12,4 @@ yolo/datasets/
 audio_files/
 annotated_images/
 results/
-test.txt
+test.*
