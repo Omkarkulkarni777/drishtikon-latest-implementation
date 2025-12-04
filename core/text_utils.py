@@ -8,7 +8,7 @@ import re
 from typing import List
 
 
-def split_into_sentences(text: str, min_len: int = 25) -> List[str]:
+def split_into_sentences(text: str, min_len: int = 10) -> List[str]:
     """
     Split text into 'forgiving' sentence chunks.
 
@@ -44,7 +44,7 @@ def split_into_sentences(text: str, min_len: int = 25) -> List[str]:
             continue
 
         # If the chunk is very short (likely OCR noise), merge into previous
-        if len(chunk) < min_len and len(sentences[-1]) < min_len:
+        if len(chunk) < min_len:
             sentences[-1] = sentences[-1] + " " + chunk
         else:
             sentences.append(chunk)

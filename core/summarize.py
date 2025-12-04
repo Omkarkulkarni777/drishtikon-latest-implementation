@@ -42,7 +42,7 @@ def summarize(text: str) -> str:
 
     prompt = f"""
     You are an AI summarizer. Summarize the following text clearly and concisely
-    without changing the meaning:
+    without changing the meaning ({int(len(text) / 4)} words max):
 
     TEXT:
     \"\"\"{text}\"\"\"

@@ -10,6 +10,7 @@ if PROJECT_ROOT not in sys.path:
 import cv2
 import time
 import datetime
+import select
 import tkinter as tk
 from tkinter import filedialog
 from PIL import Image
@@ -224,72 +225,68 @@ def main():
     print("\n=======================\n")
 
     # ================================================================
-    # Commit 8.5: Chunk-based reading
+    # Commit 8.6: Pause / Resume / Quit support for chunk reading
     # ================================================================
 
-    # Split text into forgiving sentence chunks
     sentences = split_into_sentences(text)
 
     if not sentences:
         speak("I could not extract readable sentences from this page.")
         return
 
-    print("\n===== READING CHUNKS =====\n")
+    print("\n===== CHUNKED READING WITH PAUSE SUPPORT =====\n")
 
-    read_so_far = []        # list of sentences already read
-    current_index = 0       # pointer to next sentence to read
+    read_so_far = []
+    current_index = 0
 
     while current_index < len(sentences):
 
         sentence = sentences[current_index]
         print(f"[READ] Sentence {current_index+1}/{len(sentences)}: {sentence}")
 
-        # Convert chunk to speech (wav file)
+        # Generate audio for this chunk
         audio_path = speak(sentence)
 
-        # Play using main TTS engine
+        # Start playback
         tts_main.play(audio_path)
 
-        # Wait until sentence finishes
-        while tts_main.is_playing():
-            time.sleep(0.05)
+        # --- CHUNK PLAYBACK LOOP WITH PAUSE/RESUME/QUIT ---
+        while True:
 
-        # Mark chunk as completed
+            # If finished naturally → exit inner loop
+            if not tts_main.is_playing():
+                break
+
+            # Check for user input (non-blocking)
+            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                key = sys.stdin.readline().strip().lower()
+
+                # Pause playback
+                if key == "p":
+                    print("[PAUSE] Paused reading")
+                    tts_main.pause()
+
+                # Resume playback
+                elif key == "r":
+                    print("[RESUME] Resuming")
+                    tts_main.resume()
+
+                # Quit reading
+                elif key == "q":
+                    print("[QUIT] Stopping reading module")
+                    tts_main.stop()
+                    return
+
+            time.sleep(0.05)
+        # ---------------------------------------------------
+
+        # Finished this sentence
         read_so_far.append(sentence)
         current_index += 1
 
     print("\n===== FINISHED ALL SENTENCE CHUNKS =====\n")
 
-
-    # ============================================================
-    #  Basic terminal controls for pausing / resuming / stopping
-    # ============================================================
-    print("[READ] Controls:")
-    print("   p = Pause")
-    print("   r = Resume")
-    print("   q = Quit reading module")
-
-    while True:
-        cmd = input("[READ] Command (p/r/q): ").strip().lower()
-
-        if cmd == "p":
-            print("[READ] Pausing playback.")
-            tts_main.pause()
-
-        elif cmd == "r":
-            print("[READ] Resuming playback.")
-            tts_main.resume()
-
-
-        elif cmd == "q":
-            print("[READ] Quitting reading module.")
-            tts_main.stop()
-            break
-
-        else:
-            print("[READ] Unknown command. Use p/r/s/q.")
-
-
+    
 # ================================================================
 if __name__ == "__main__":
     main()
