@@ -20,6 +20,12 @@ class TTSPlayer:
         self._is_stopped = False
         self._lock = threading.Lock()
 
+    def is_playing(self):
+        """
+        Check if playback is currently active.
+        """
+        return self._thread is not None and self._thread.is_alive()
+
     # ------------------------------------------------------------
     # Internal threaded playback loop
     # ------------------------------------------------------------
