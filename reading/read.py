@@ -1,150 +1,209 @@
-import tkinter as tk
-from tkinter import filedialog
-from google.cloud import texttospeech, speech, vision
-import google.generativeai as genai
-from google.oauth2 import service_account
-import cv2
 import os
 import sys
+import subprocess
+
+# Ensure the project root is in sys.path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+import cv2
 import time
 import datetime
-import simpleaudio as sa
+import tkinter as tk
+from tkinter import filedialog
+from PIL import Image
+import io
 from dotenv import load_dotenv
-import time
+import google.generativeai as genai
 
-############################################################
-#                 LOAD ENVIRONMENT
-############################################################
+from core.utils import absolute_path, ensure_dir, load_credential_path
+from core.tts import speak
+from core.logger import log
+
 load_dotenv()
+
+# ================================================================
+#  CREDENTIALS
+# ================================================================
+CRED_PATH = load_credential_path("reading", "reading-key.json")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
-genai.configure(api_key=GEMINI_API_KEY)
 
-############################################################
-#                 GOOGLE CREDENTIALS
-############################################################
-STT_TTS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    "cred/imperial-glyph-448202-p6-d36e2b69bd92.json"
-)
-############################################################
-#                 DIRECTORIES
-############################################################
-RES = "results"
-AUDIO_DIR = os.path.join(RES, "audio_outputs")
-os.makedirs(AUDIO_DIR, exist_ok=True)
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-############################################################
-#                 CLIENTS
-############################################################
-tts_client = texttospeech.TextToSpeechClient(credentials=STT_TTS_CREDENTIALS)
-stt_client = speech.SpeechClient(credentials=STT_TTS_CREDENTIALS)
 
-############################################################
-#                 TEXT TO SPEECH (LINUX+RPi SAFE)
-############################################################
-def speak(text):
-    synthesis_input = texttospeech.SynthesisInput(text=text)
+# ================================================================
+# HELPERS
+# ================================================================
+def ensure_results_dir():
+    ensure_dir(absolute_path("results"))
+    ensure_dir(absolute_path("results", "reading_outputs"))
 
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="en-US",
-        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+
+# ================================================================
+# IMAGE OPTIMIZATION
+# ================================================================
+def optimize_image(image_path):
+    img = Image.open(image_path)
+
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
+
+    img.thumbnail((1800, 1800))
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=80)
+
+    return buf.getvalue()
+
+
+# ================================================================
+# GEMINI OCR + SUMMARIZATION
+# ================================================================
+def gemini_read(image_path, prompt):
+
+    if not GEMINI_API_KEY or not GEMINI_MODEL:
+        return "Gemini not configured.", 0
+
+    optimized_bytes = optimize_image(image_path)
+    model = genai.GenerativeModel(GEMINI_MODEL)
+
+    final_text = []
+    start = time.time()
+
+    response = model.generate_content(
+        [
+            {"mime_type": "image/jpeg", "data": optimized_bytes},
+            prompt
+        ],
+        stream=True
     )
 
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.LINEAR16
-    )
+    for chunk in response:
+        if hasattr(chunk, "text") and chunk.text:
+            final_text.append(chunk.text)
 
-    response = tts_client.synthesize_speech(
-        input=synthesis_input,
-        voice=voice,
-        audio_config=audio_config
-    )
-
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    audio_path = os.path.join(AUDIO_DIR, f"tts_{ts}.wav")
-
-    with open(audio_path, "wb") as out:
-        out.write(response.audio_content)
-
-    try:
-        wave_obj = sa.WaveObject.from_wave_file(audio_path)
-        play_obj = wave_obj.play()
-        play_obj.wait_done()
-    except Exception as e:
-        print("Audio playback error:", e)
+    duration = round(time.time() - start, 2)
+    return "".join(final_text), duration
 
 
-############################################################
-#               FILE CHOOSER (NO CAMERA)
-############################################################
+# ================================================================
+# FILE PICKER
+# ================================================================
 def choose_file():
     root = tk.Tk()
+    root.attributes("-topmost", True)
     root.withdraw()
 
-    filepath = filedialog.askopenfilename(
-        initialdir="images",
+    fp = filedialog.askopenfilename(
         title="Select an image file",
-        filetypes=(
+        filetypes=[
             ("Image Files", "*.jpg *.jpeg *.png *.bmp *.webp"),
-            ("All files", "*.*"),
-        ),
+            ("All Files", "*.*")
+        ]
     )
     root.destroy()
-    return filepath
 
-############################################################
-#              GEMINI MULTIMODAL CORRECTION
-############################################################
-def refine_text_with_gemini_and_image(prompt_text, image_path):
-    if not GEMINI_API_KEY or not GEMINI_MODEL:
-        return prompt_text
+    if not fp:
+        return None
 
-    with open(image_path, "rb") as f:
-        image_bytes = f.read()
+    # Save copy to results
+    img = cv2.imread(fp)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = absolute_path("results", "reading_outputs", f"capture_{ts}.jpg")
+    cv2.imwrite(save_path, img)
 
-    mime_type = "image/jpeg"
+    return save_path
+
+
+# ================================================================
+# CAMERA CAPTURE - Raspberry Pi compatible
+# ================================================================
+def capture_with_libcamera():
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = absolute_path("results", "reading_outputs", f"capture_{ts}.jpg")
+
+    cmd = ["libcamera-still", "-o", out_path, "--immediate", "--timeout", "1"]
 
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        gemini_start_time = time.time()
-        res = model.generate_content([
-            {"mime_type": mime_type, "data": image_bytes},
-            prompt_text,
-        ])
-        gemini_end_time = time.time()
-        print("Time taken by Gemini:", gemini_end_time - gemini_start_time)
-        return getattr(res, "text", prompt_text)
-
+        subprocess.run(cmd, check=True)
+        return out_path
     except Exception:
-        return prompt_text
+        return None
 
 
-############################################################
-#                      MAIN LOGIC
-############################################################
+def capture_image():
+    # Try OpenCV camera first (legacy mode)
+    cam = cv2.VideoCapture(0)
+
+    if cam.isOpened():
+        speak("Press SPACE to capture, ESC to exit.")
+
+        while True:
+            ret, frame = cam.read()
+            if not ret:
+                continue
+
+            cv2.imshow("Camera Capture - Press SPACE", frame)
+            key = cv2.waitKey(1)
+
+            if key == 32:  # SPACE
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                path = absolute_path("results", "reading_outputs", f"capture_{ts}.jpg")
+                cv2.imwrite(path, frame)
+                cam.release()
+                cv2.destroyAllWindows()
+                return path
+
+            elif key == 27:  # ESC
+                break
+
+        cam.release()
+        cv2.destroyAllWindows()
+
+    # If OpenCV fails → fallback to libcamera
+    speak("Switching to Raspberry Pi camera mode.")
+    return capture_with_libcamera()
+
+
+# ================================================================
+# MAIN
+# ================================================================
 def main():
-    speak("Welcome! Select an image file for text extraction.")
+    ensure_results_dir()
+    speak("Select an image file. If you cancel, I will open the camera.")
 
     img_path = choose_file()
+
     if not img_path:
-        speak("No image selected.")
+        speak("No file selected. Opening camera.")
+        img_path = capture_image()
+
+    if not img_path:
+        speak("No image captured. Exiting.")
         return
 
-    refinement_prompt = f"""
-    Task: Act as a better version of the Google Vision OCR.
-    If the image contains text (like from a book), include the complete, UNSUMMARIZED text content.
-    Summarize only contextual elements like book title, chapter, or page numbers separately from the quoted text. 
-    If the content is medical, issue a clear alarm.
-    If no text is found, say "NO TEXT FOUND" and SUMMARIZE the visual (25 WORDS ONLY).
-    Do NOT use headers, bullet points, or lists in your final response.
+    refinement_prompt = """
+    This image was captured by a blind user.
+    Extract the exact text from the book page.
+    Do not paraphrase or modify anything.
     """
-    
-    refined = refine_text_with_gemini_and_image(refinement_prompt, img_path)
 
-    speak(refined)
-    print("\nRefined OCR result:\n", refined)
+    speak("Processing the image. Please wait.")
+
+    text, duration = gemini_read(img_path, refinement_prompt)
+    log("READING", img_path, f"{len(text)} chars", duration)
+
+    print("\n===== OCR RESULT =====\n")
+    print(text)
+    print("\n=======================\n")
+
+    speak(text)
 
 
+# ================================================================
 if __name__ == "__main__":
     main()

@@ -1,132 +1,83 @@
-import cv2
+import datetime
+import sys
+import os
+
+# Ensure project root in sys.path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import time
 import threading
-import os
-from ultralytics import YOLO
-import simpleaudio as sa
+import cv2
 import tkinter as tk
 from tkinter import filedialog
-
-from google.cloud import texttospeech
-from google.oauth2 import service_account
-import google.generativeai as genai
 from dotenv import load_dotenv
+import google.generativeai as genai
+from ultralytics import YOLO
+
+from core.tts import speak
+from core.logger import log
+from core.utils import absolute_path, ensure_dir, load_credential_path
 
 load_dotenv()
 
-############################################################
-#                      CONFIG
-############################################################
+# ================================================================
+# CREDENTIALS
+# ================================================================
+CRED_PATH = load_credential_path("yolo", "yolo-key.json")
 
-# --- GEMINI CONFIG ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# COOLDOWN SETTINGS
-ENV_UPDATE_INTERVAL = 60  # seconds
-last_gemini_time = 0
-gemini_busy = False
+# ================================================================
+# DIRECTORIES
+# ================================================================
+OUTPUT_DIR = absolute_path("results", "yolo_outputs")
+ensure_dir(OUTPUT_DIR)
 
-# --- GOOGLE TTS ---
-TTS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    "cred/imperial-glyph-448202-p6-d36e2b69bd92.json"
-)
-tts_client = texttospeech.TextToSpeechClient(credentials=TTS_CREDENTIALS)
+# ================================================================
+# YOLO MODEL
+# ================================================================
+model = YOLO("yolov8n.pt")
 
-
-############################################################
-#                      TEXT TO SPEECH
-############################################################
-
-def speak(message):
-    print("Speaking:", message)
-
-    synthesis_input = texttospeech.SynthesisInput(text=message)
-
-    voice = texttospeech.VoiceSelectionParams(
-        language_code="en-US",
-        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
-    )
-
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.LINEAR16
-    )
-
-    response = tts_client.synthesize_speech(
-        input=synthesis_input,
-        voice=voice,
-        audio_config=audio_config
-    )
-
-    temp_audio = "temp_tts.wav"
-    with open(temp_audio, "wb") as f:
-        f.write(response.audio_content)
-
-    try:
-        wave_obj = sa.WaveObject.from_wave_file(temp_audio)
-        play = wave_obj.play()
-        play.wait_done()
-    except:
-        pass
-
-    try:
-        os.remove(temp_audio)
-    except:
-        pass
-
-
-############################################################
-#                  FILE CHOOSER
-############################################################
-
+# ================================================================
+# FILE PICKER
+# ================================================================
 def choose_file():
     root = tk.Tk()
+    root.attributes("-topmost", True)
     root.withdraw()
+
     fp = filedialog.askopenfilename(
-        title="Choose an image",
-        filetypes=[("Image Files", "*.jpg *.jpeg *.png *.bmp")]
+        title="Select an image",
+        filetypes=[("Images", "*.jpg *.jpeg *.png *.bmp"), ("All Files", "*.*")]
     )
     root.destroy()
     return fp
 
-
-############################################################
-#                  YOLO HELPERS
-############################################################
-
-model = YOLO("yolov8n.pt")
-
-def describe_yolo(boxes, names):
-    if not boxes:
+# ================================================================
+# YOLO COUNTS
+# ================================================================
+def describe_yolo(classes, names):
+    if not classes:
         return "I do not see any objects."
 
     counts = {}
-    for cls_idx in boxes:
+    for cls_idx in classes:
         label = names[int(cls_idx)]
         counts[label] = counts.get(label, 0) + 1
 
-    parts = []
-    for label, count in counts.items():
-        if count == 1:
-            parts.append(f"a {label}")
-        else:
-            parts.append(f"{count} {label}s")
-
+    parts = [f"{count} {label}{'' if count==1 else 's'}" for label, count in counts.items()]
     return "I can see " + ", ".join(parts) + "."
 
-# =============================================
-# POSITIONAL INFORMATION ASSISTANCE
-# =============================================
-
+# ================================================================
+# YOLO POSITIONAL DESCRIPTIONS
+# ================================================================
 def positional_descriptions(results):
-    """
-    Returns a description of object positions:
-    left / center / right in the image.
-    """
-
     if len(results[0].boxes) == 0:
         return "I do not see any objects."
 
@@ -134,141 +85,122 @@ def positional_descriptions(results):
     names = results[0].names
     width = results[0].orig_shape[1]
 
-    left_items = []
-    center_items = []
-    right_items = []
+    left_items, center_items, right_items = [], [], []
 
     for box in boxes:
         cls_idx = int(box.cls[0])
         label = names[cls_idx]
 
-        xyxy = box.xyxy[0]  # [x1, y1, x2, y2]
+        xyxy = box.xyxy[0]
         x_center = float((xyxy[0] + xyxy[2]) / 2)
 
-        # LEFT
         if x_center < width * 0.33:
             left_items.append(label)
-
-        # RIGHT
         elif x_center > width * 0.66:
             right_items.append(label)
-
-        # CENTER
         else:
             center_items.append(label)
 
     parts = []
-
-    if left_items:
-        parts.append("to the left I can see " + ", ".join(left_items))
-
-    if center_items:
-        parts.append("in the center there is " + ", ".join(center_items))
-
-    if right_items:
-        parts.append("to the right I can see " + ", ".join(right_items))
+    if left_items:   parts.append("to the left I can see " + ", ".join(left_items))
+    if center_items: parts.append("in the center there is " + ", ".join(center_items))
+    if right_items:  parts.append("to the right I can see " + ", ".join(right_items))
 
     return ". ".join(parts) + "."
 
-############################################################
-#                  GEMINI SCENE
-############################################################
-
+# ================================================================
+# GEMINI SCENE DESCRIPTION
+# ================================================================
 def gemini_scene(path):
-    global gemini_busy
-    gemini_busy = True
-
     img = cv2.imread(path)
+    if img is None:
+        speak("Image load failed.")
+        return
+
     success, encoded = cv2.imencode(".jpg", img)
     if not success:
         speak("Image encoding failed.")
-        gemini_busy = False
         return
-        
-    gemini_start_time = time.time()
-    image_bytes = encoded.tobytes()
 
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    image_bytes = encoded.tobytes()
+    model_g = genai.GenerativeModel(GEMINI_MODEL)
+
     prompt = "Describe the scene in 40 words."
 
+    t0 = time.time()
     try:
-        res = model.generate_content(
+        res = model_g.generate_content(
             [{"mime_type": "image/jpeg", "data": image_bytes}, prompt]
         )
-        gemini_end_time = time.time()
-        print("Time taken by Gemini:", gemini_end_time - gemini_start_time)
+
         text = getattr(res, "text", "")
+        duration = round(time.time() - t0, 2)
+
         speak("Gemini summary: " + text)
+        log("YOLO-GEMINI", path, f"{len(text)} chars", duration)
+
     except Exception as e:
-        print("Gemini ERROR:", e)
+        log("YOLO-GEMINI", path, f"ERROR: {e}")
 
-    gemini_busy = False
-
-
-############################################################
-#                       MAIN
-############################################################
-
+# ================================================================
+# MAIN
+# ================================================================
 def main():
-    global last_gemini_time
-
-    speak("Choose an image. Press Y for YOLO, G for Gemini, Q to quit.")
-
+    speak("Select an image for detection.")
     fp = choose_file()
+
     if not fp:
         speak("No image selected.")
         return
 
     img = cv2.imread(fp)
-    height, width, channels = img.shape
+    if img is None:
+        speak("Failed to open image.")
+        return
+
+    # Window sizing for Pi screen
+    h, w, _ = img.shape
+    cv2.namedWindow("YOLO", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("YOLO", 900, int(h * 900 / w))
+
+    speak("Press Y for YOLO detection, G for Gemini summary, Q to exit.")
+
+    display_frame = img
+
     while True:
-        # Display (non-blocking)
-        cv2.namedWindow("AI Vision", cv2.WINDOW_NORMAL)
-        
-        cv2.resizeWindow("AI Vision", 800, int(height * 800 / width))
-        cv2.imshow("AI Vision", img)
+        cv2.imshow("YOLO", display_frame)
         key = cv2.waitKey(1) & 0xFF
 
-        # Quit
+        # EXIT
         if key == ord('q'):
-            speak("Exiting vision module.")
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            save_path = absolute_path("results", "yolo_outputs", f"output_{ts}.jpg")
+            cv2.imwrite(save_path, img)
+            speak("Exiting YOLO module.")
             break
 
-        # YOLO
+        # YOLO DETECTION
         if key == ord('y'):
-            yolo_start_time = time.time()
+            t0 = time.time()
+
             results = model.predict(img, verbose=False)
+
+            # YOLO returns RGB → convert to BGR for cv2
             annotated = results[0].plot()
-
-            # Convert RGB → BGR for OpenCV
             annotated_bgr = cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR)
+            display_frame = annotated_bgr
 
-            # Old description (object counts)
-            desc = describe_yolo([box.cls[0] for box in results[0].boxes], results[0].names)
-
-            # NEW positional description
+            classes = [box.cls[0] for box in results[0].boxes] if results[0].boxes else []
+            desc = describe_yolo(classes, results[0].names)
             pos_desc = positional_descriptions(results)
-            yolo_end_time = time.time()
-            print("Time taken by YOLO + positional information extraction:", yolo_end_time - yolo_start_time)
-            speak("YOLO result: " + desc + ". " + pos_desc)
 
-            cv2.imshow("AI Vision", annotated_bgr)
-            
-        # GEMINI
+            duration = round(time.time() - t0, 2)
+            log("YOLO", fp, f"{desc} | {pos_desc}", duration)
+
+            speak(desc + " " + pos_desc)
+
+        # GEMINI SUMMARY
         if key == ord('g'):
-            now = time.time()
-            cooldown = now - last_gemini_time
-
-            if gemini_busy:
-                print("Gemini is busy…")
-                continue
-
-            if cooldown < ENV_UPDATE_INTERVAL:
-                left = ENV_UPDATE_INTERVAL - cooldown
-                speak(f"Gemini cooling down. {int(left)} seconds remaining.")
-                continue
-
-            last_gemini_time = now
             threading.Thread(
                 target=gemini_scene,
                 args=(fp,),
@@ -277,6 +209,6 @@ def main():
 
     cv2.destroyAllWindows()
 
-
+# ================================================================
 if __name__ == "__main__":
     main()
