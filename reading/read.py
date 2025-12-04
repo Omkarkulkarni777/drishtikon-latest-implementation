@@ -21,6 +21,7 @@ from core.utils import absolute_path, ensure_dir, load_credential_path
 from core.tts import speak
 from core.tts_player import tts_main
 from core.logger import log
+from core.text_utils import split_into_sentences
 
 load_dotenv()
 
@@ -222,13 +223,43 @@ def main():
     print(text)
     print("\n=======================\n")
 
-    # Generate _main audio for the extracted text
-    audio_path = speak(text)
-    if not audio_path:
-        print("[READ] No audio path returned.")
+    # ================================================================
+    # Commit 8.5: Chunk-based reading
+    # ================================================================
+
+    # Split text into forgiving sentence chunks
+    sentences = split_into_sentences(text)
+
+    if not sentences:
+        speak("I could not extract readable sentences from this page.")
         return
 
-    tts_main.play(audio_path)
+    print("\n===== READING CHUNKS =====\n")
+
+    read_so_far = []        # list of sentences already read
+    current_index = 0       # pointer to next sentence to read
+
+    while current_index < len(sentences):
+
+        sentence = sentences[current_index]
+        print(f"[READ] Sentence {current_index+1}/{len(sentences)}: {sentence}")
+
+        # Convert chunk to speech (wav file)
+        audio_path = speak(sentence)
+
+        # Play using main TTS engine
+        tts_main.play(audio_path)
+
+        # Wait until sentence finishes
+        while tts_main.is_playing():
+            time.sleep(0.05)
+
+        # Mark chunk as completed
+        read_so_far.append(sentence)
+        current_index += 1
+
+    print("\n===== FINISHED ALL SENTENCE CHUNKS =====\n")
+
 
     # ============================================================
     #  Basic terminal controls for pausing / resuming / stopping
