@@ -359,6 +359,99 @@ def main():
 
                         else:
                             print("Invalid option. Try again.")
+                
+                elif key == "v":
+                    print("[VOICE] Entering voice control mode...")
+                    tts_main.pause()
+                    
+                    from core.stt_commands import listen_for_command
+
+                    attempts = 0
+                    MAX_ATTEMPTS = 1
+
+                    while attempts < MAX_ATTEMPTS:
+                        command = listen_for_command()
+                        print(f"[VOICE] Recognized: {command}")
+
+                        if command is None:
+                            attempts += 1
+                            speak_blocking("I did not catch that. Please try again.")
+                            continue
+
+                        # -------------------------
+                        # RESUME
+                        # -------------------------
+                        if command == "resume":
+                            print("[VOICE] Resuming reading")
+                            speak_blocking("Resuming reading")
+                            time.sleep(1)
+                            tts_main.resume()
+                            break
+
+                        # -------------------------
+                        # QUIT
+                        # -------------------------
+                        elif command == "quit":
+                            print("[VOICE] Exiting reading module")
+                            speak_blocking("Exiting reading module")
+                            tts_main.stop()
+                            return
+
+                        # -------------------------
+                        # SUMMARY
+                        # -------------------------
+                        elif command == "summary":
+                            if not read_so_far:
+                                speak_blocking("No text has been read yet.")
+                                continue
+
+                            print("[VOICE] Generating summary...")
+                            speak_blocking("Generating summary")
+
+                            summary_input = " ".join(read_so_far)
+                            summary_text = summarize(summary_input)
+
+                            print("\n===== SUMMARY OUTPUT =====\n")
+                            print(summary_text)
+                            print("\n============================\n")
+
+                            summary_audio = speak(summary_text)
+                            tts_summary.play(summary_audio)
+
+                            print("Summary Mode:")
+                            print("  s = stop summary and return to voice commands")
+
+                            # summary loop
+                            while True:
+                                if not tts_summary.is_playing():
+                                    break
+
+                                if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                                    subkey = sys.stdin.readline().strip().lower()
+                                    if subkey == "s":
+                                        print("[SUMMARY] Summary stopped.")
+                                        speak_blocking("Stopping summary")
+                                        tts_summary.stop()
+                                        break
+
+                                time.sleep(0.05)
+
+                            speak_blocking("Back to voice control")
+                            attempts = 0
+                            continue
+
+                        # -------------------------
+                        # UNKNOWN COMMAND
+                        # -------------------------
+                        else:
+                            speak_blocking("Unknown command. Try again.")
+                            attempts += 1
+                    
+                    # If attempts exceeded
+                    if attempts >= MAX_ATTEMPTS:
+                        speak_blocking("Returning to reading.")
+                        time.sleep(1)
+                        tts_main.resume()
 
                 # -------------------------
                 # MID-PLAYBACK RESUME
