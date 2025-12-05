@@ -87,16 +87,12 @@ def gemini_read(image_path, prompt):
         [
             {"mime_type": "image/jpeg", "data": optimized_bytes},
             prompt,
-        ],
-        stream=True,
+        ]
     )
 
-    for chunk in response:
-        if hasattr(chunk, "text") and chunk.text:
-            final_text.append(chunk.text)
-
+    text = getattr(response, "text", "")
     duration = round(time.time() - start, 2)
-    return "".join(final_text), duration
+    return text, duration
 
 
 # ================================================================
@@ -199,7 +195,6 @@ def main():
         fallback_path = speak("No file selected. Opening camera.")
         if fallback_path:
             tts_main.play(fallback_path)
-
         img_path = capture_image()
 
     if not img_path:
@@ -207,12 +202,13 @@ def main():
         return
 
     # STEP 2 — OCR prompt
-    process_path = speak_blocking("Processing the image. Please wait.")
+    speak_blocking("Processing the image. Please wait.")
 
     refinement_prompt = """
     This image was captured by a blind user.
     Extract the exact text from the book page.
     Do not paraphrase or modify anything.
+    Do not add asterisks or other formatting.
     """
 
     text, duration = gemini_read(img_path, refinement_prompt)
@@ -222,13 +218,12 @@ def main():
     print(text)
     print("\n=======================\n")
 
-    # Handle empty OCR text edge case
     if not text.strip():
-        empty_path = speak_blocking("The page appears empty or unreadable.")
+        speak_blocking("The page appears empty or unreadable.")
         return
 
     # ================================================================
-    # Chunk-based reading with pause + summary (Commit 8.8 polished)
+    # Chunk-based reading + pause + summary + voice mode
     # ================================================================
     sentences = split_into_sentences(text)
 
@@ -236,10 +231,13 @@ def main():
         speak_blocking("I could not extract readable sentences from this page.")
         return
 
-    print("\n===== CHUNKED READING (PAUSE + SUMMARY ENABLED) =====\n")
+    print("\n===== CHUNKED READING (PAUSE + SUMMARY + VOICE MODE) =====\n")
 
     read_so_far = []
     current_index = 0
+
+    # NEW: needed for restart logic
+    restart_chunk = False
 
     # -------------------------
     # MAIN CHUNK LOOP
@@ -247,7 +245,7 @@ def main():
     while current_index < len(sentences):
 
         sentence = sentences[current_index]
-        print(f"[READ] {current_index+1}/{len(sentences)} → {sentence}")
+        print(f"[READ] {current_index + 1}/{len(sentences)} → {sentence}")
 
         audio_path = speak(sentence)
         tts_main.play(audio_path)
@@ -257,25 +255,23 @@ def main():
         # -----------------------------
         while True:
 
-            # 1. Chunk finished naturally
+            # Natural chunk end
             if not tts_main.is_playing():
                 break
 
-            # 2. Non-blocking key check
+            # Keyboard controls
             if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
                 key = sys.stdin.readline().strip().lower()
 
-                # -------------------------
-                # PAUSE MAIN READING
-                # -------------------------
+                # --------------------------------------------------------
+                # PAUSE ("p")
+                # --------------------------------------------------------
                 if key == "p":
                     print("[PAUSE] Reading paused")
                     tts_main.pause()
                     speak_blocking("Reading paused")
 
-                    # ==========================
-                    # PAUSE MENU
-                    # ==========================
+                    # ====== PAUSE MENU ======
                     while True:
                         print("\nPaused. Options:")
                         print("  r = resume reading")
@@ -289,137 +285,40 @@ def main():
                         # RESUME
                         # -------------------------
                         if choice == "r":
-                            print("[RESUME] Continuing reading")
-                            speak_blocking("Resuming reading")
-                            time.sleep(1)
-                            tts_main.resume()
-                            break
+                            if restart_chunk:
+                                print("[RESUME] Restarting chunk from beginning")
+                                speak_blocking("Restarting this part")
 
-                        # -------------------------
-                        # QUIT
-                        # -------------------------
-                        elif choice == "q":
-                            print("[QUIT] Exiting reading module.")
-                            speak_blocking("Exiting reading module.")
-                            tts_main.stop()
-                            return
+                                tts_main.stop()
+                                audio_path = speak(sentence)
+                                tts_main.play(audio_path)
 
-                        # -------------------------
-                        # SUMMARY MODE
-                        # -------------------------
-                        elif choice == "m":
-                            if not read_so_far:
-                                print("[SUMMARY] No content has been read yet.")
-                                speak_blocking("No content has been read yet.")
-                                continue
+                                restart_chunk = False
+                            else:
+                                print("[RESUME] Resuming reading")
+                                speak_blocking("Resuming")
+                                tts_main.resume()
 
-                            print("[SUMMARY] Generating summary...")
-                            speak_blocking("Generating summary...")
-
-                            summary_input = " ".join(read_so_far)
-                            summary_text = summarize(summary_input)
-
-                            # handle empty summary (rare but could happen)
-                            if not summary_text.strip():
-                                print("[SUMMARY] Summary is empty.")
-                                speak_blocking("Summary empty!")
-                                continue
-
-                            print("\n===== SUMMARY OUTPUT =====\n")
-                            print(summary_text)
-                            print("\n============================\n")
-
-                            summary_audio = speak(summary_text)
-                            tts_summary.play(summary_audio)
-
-                            print("Summary Mode:")
-                            print("  s = stop summary and return to pause menu")
-
-                            # -------------------------
-                            # SUMMARY MODE LOOP
-                            # -------------------------
-                            while True:
-                                if not tts_summary.is_playing():
-                                    print("[SUMMARY] Finished.")
-                                    break
-
-                                if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                                    subkey = sys.stdin.readline().strip().lower()
-
-                                    if subkey == "s":
-                                        print("[SUMMARY] Summary stopped.")
-                                        speak_blocking("Stopping summary")
-                                        tts_summary.stop()
-                                        break
-
-                                time.sleep(0.05)
-
-                            print("\nBack to pause menu...\n")
-                            speak_blocking("Back to pause menu")
-
-                        else:
-                            print("Invalid option. Try again.")
-                
-                elif key == "v":
-                    print("[VOICE] Entering voice control mode...")
-                    tts_main.pause()
-                    
-                    from core.stt_commands import listen_for_command
-
-                    attempts = 0
-                    MAX_ATTEMPTS = 1
-
-                    while attempts < MAX_ATTEMPTS:
-                        command = listen_for_command()
-                        print(f"[VOICE] Recognized: {command}")
-
-                        if command is None:
-                            attempts += 1
-                            speak_blocking("I did not catch that. Please try again.")
-                            continue
-
-                        # -------------------------
-                        # RESUME
-                        # -------------------------
-                        if command == "resume":
-                            print("[VOICE] Resuming reading")
-                            speak_blocking("Resuming reading")
-                            time.sleep(1)
-                            tts_main.resume()
-                            break
-
-                        # -------------------------
-                        # QUIT
-                        # -------------------------
-                        elif command == "quit":
-                            print("[VOICE] Exiting reading module")
-                            speak_blocking("Exiting reading module")
-                            tts_main.stop()
-                            return
+                            break  # exit pause menu
 
                         # -------------------------
                         # SUMMARY
                         # -------------------------
-                        elif command == "summary":
+                        elif choice == "m":
                             if not read_so_far:
-                                speak_blocking("No text has been read yet.")
+                                speak_blocking("No content has been read yet.")
                                 continue
 
-                            print("[VOICE] Generating summary...")
+                            print("[SUMMARY] Generating summary...")
                             speak_blocking("Generating summary")
 
                             summary_input = " ".join(read_so_far)
                             summary_text = summarize(summary_input)
-
-                            print("\n===== SUMMARY OUTPUT =====\n")
-                            print(summary_text)
-                            print("\n============================\n")
-
                             summary_audio = speak(summary_text)
                             tts_summary.play(summary_audio)
 
                             print("Summary Mode:")
-                            print("  s = stop summary and return to voice commands")
+                            print("  s = stop summary and return")
 
                             # summary loop
                             while True:
@@ -427,58 +326,111 @@ def main():
                                     break
 
                                 if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                                    subkey = sys.stdin.readline().strip().lower()
-                                    if subkey == "s":
-                                        print("[SUMMARY] Summary stopped.")
+                                    if sys.stdin.readline().strip().lower() == "s":
                                         speak_blocking("Stopping summary")
                                         tts_summary.stop()
                                         break
 
                                 time.sleep(0.05)
 
-                            speak_blocking("Back to voice control")
-                            attempts = 0
+                            speak_blocking("Summary finished")
+                            restart_chunk = True  # NEW LOGIC
+                            continue  # return to pause menu
+
+                        # -------------------------
+                        # QUIT
+                        # -------------------------
+                        elif choice == "q":
+                            speak_blocking("Exiting reading module.")
+                            tts_main.stop()
+                            return
+
+                        else:
+                            print("Invalid option.")
                             continue
 
-                        # -------------------------
-                        # UNKNOWN COMMAND
-                        # -------------------------
+                # --------------------------------------------------------
+                # VOICE CONTROL ("v")
+                # --------------------------------------------------------
+                elif key == "v":
+                    print("[VOICE] Entering voice control mode...")
+                    tts_main.pause()
+
+                    from core.stt_commands import listen_for_command
+                    failures = 0
+                    MAX_FAILURES = 5
+
+                    while failures < MAX_FAILURES:
+                        command = listen_for_command()
+
+                        if command is None:
+                            failures += 1
+                            speak_blocking("I did not catch that. Try again.")
+                            continue
+
+                        # RESUME
+                        if command == "resume":
+                            if restart_chunk:
+                                speak_blocking("Restarting this part")
+                                tts_main.stop()
+                                audio_path = speak(sentence)
+                                tts_main.play(audio_path)
+                                restart_chunk = False
+                            else:
+                                speak_blocking("Resuming reading")
+                                tts_main.resume()
+                            break
+
+                        # QUIT
+                        elif command == "quit":
+                            speak_blocking("Exiting reading module")
+                            tts_main.stop()
+                            return
+
+                        # SUMMARY
+                        elif command == "summary":
+                            if not read_so_far:
+                                speak_blocking("No content has been read yet.")
+                                continue
+
+                            speak_blocking("Generating summary")
+                            summary_text = summarize(" ".join(read_so_far))
+                            summary_audio = speak(summary_text)
+                            tts_summary.play(summary_audio)
+
+                            print("Summary Mode (press 's' to stop)")
+
+                            while True:
+                                if not tts_summary.is_playing():
+                                    break
+                                if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                                    if sys.stdin.readline().strip().lower() == "s":
+                                        speak_blocking("Stopping summary")
+                                        tts_summary.stop()
+                                        break
+                                time.sleep(0.05)
+
+                            speak_blocking("Back to voice control")
+                            restart_chunk = True
+                            continue
+
                         else:
-                            speak_blocking("Unknown command. Try again.")
-                            attempts += 1
-                    
-                    # If attempts exceeded
-                    if attempts >= MAX_ATTEMPTS:
-                        speak_blocking("Returning to reading.")
-                        time.sleep(1)
+                            speak_blocking("Unknown command")
+                            failures += 1
+
+                    if failures >= MAX_FAILURES:
+                        speak_blocking("Returning to reading")
                         tts_main.resume()
-
-                # -------------------------
-                # MID-PLAYBACK RESUME
-                # -------------------------
-                elif key == "r":
-                    print("[RESUME] Resuming playback")
-                    speak_blocking("Resuming...")
-                    time.sleep(1)
-                    tts_main.resume()
-
-                # -------------------------
-                # FULL EXIT
-                # -------------------------
-                elif key == "q":
-                    print("[QUIT] Stopping reading module")
-                    speak_blocking("Stopping...")
-                    tts_main.stop()
-                    return
 
             time.sleep(0.05)
 
-        # Finished this sentence
+        # Finished chunk
         read_so_far.append(sentence)
         current_index += 1
 
+    speak_blocking("Completed all sentences.")
     print("\n===== COMPLETED ALL SENTENCES =====\n")
- 
+
 # ================================================================
 if __name__ == "__main__":
     main()
