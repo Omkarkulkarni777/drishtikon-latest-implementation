@@ -271,6 +271,7 @@ def main():
                 if key == "p":
                     print("[PAUSE] Reading paused")
                     tts_main.pause()
+                    speak_blocking("Reading paused")
 
                     # ==========================
                     # PAUSE MENU
@@ -289,6 +290,8 @@ def main():
                         # -------------------------
                         if choice == "r":
                             print("[RESUME] Continuing reading")
+                            speak_blocking("Resuming reading")
+                            time.sleep(1)
                             tts_main.resume()
                             break
 
@@ -319,6 +322,7 @@ def main():
                             # handle empty summary (rare but could happen)
                             if not summary_text.strip():
                                 print("[SUMMARY] Summary is empty.")
+                                speak_blocking("Summary empty!")
                                 continue
 
                             print("\n===== SUMMARY OUTPUT =====\n")
@@ -344,12 +348,14 @@ def main():
 
                                     if subkey == "s":
                                         print("[SUMMARY] Summary stopped.")
+                                        speak_blocking("Stopping summary")
                                         tts_summary.stop()
                                         break
 
                                 time.sleep(0.05)
 
                             print("\nBack to pause menu...\n")
+                            speak_blocking("Back to pause menu")
 
                         else:
                             print("Invalid option. Try again.")
@@ -359,6 +365,8 @@ def main():
                 # -------------------------
                 elif key == "r":
                     print("[RESUME] Resuming playback")
+                    speak_blocking("Resuming...")
+                    time.sleep(1)
                     tts_main.resume()
 
                 # -------------------------
@@ -366,6 +374,7 @@ def main():
                 # -------------------------
                 elif key == "q":
                     print("[QUIT] Stopping reading module")
+                    speak_blocking("Stopping...")
                     tts_main.stop()
                     return
 
