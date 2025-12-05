@@ -7,13 +7,34 @@
 # ================================================================
 
 import os
+import shutil
 import time
 import datetime
 from google.cloud import texttospeech
 from google.oauth2 import service_account
-
 from core.utils import absolute_path, ensure_dir, load_credential_path
 from core.logger import log
+
+PROMPT_CACHE_DIR = absolute_path("results", "prompt_cache")
+ensure_dir(PROMPT_CACHE_DIR)
+
+def speak_cached(text, filename):
+    """
+    Generate TTS audio once, cache it, and reuse it forever.
+    """
+    path = os.path.join(PROMPT_CACHE_DIR, filename)
+
+    # Return cached version
+    if os.path.exists(path):
+        return path
+
+    # Generate and cache
+    audio_path = speak(text)
+    if audio_path:
+        shutil.copy(audio_path, path)
+        return path
+
+    return None
 
 # ================================================================
 #   DIRECTORIES
