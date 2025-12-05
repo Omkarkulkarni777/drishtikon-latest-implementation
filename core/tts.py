@@ -95,3 +95,27 @@ def speak(text: str):
 
     # ❗RETURN THE AUDIO FILE PATH (Commit 3 change)
     return audio_path
+
+import time
+
+def speak_blocking(text: str):
+    """
+    Synthesize text → audio and play it IN BLOCKING MODE using tts_prompt.
+    Used for system-level instructions that must finish before continuing.
+    """
+    from core.tts import speak       # keeps layering clean
+    from core.tts_player import tts_prompt
+
+    # Generate wav file
+    audio_path = speak(text)
+    if not audio_path:
+        return None
+
+    # Play using prompt engine
+    tts_prompt.play(audio_path)
+
+    # Block until finished
+    while tts_prompt.is_playing():
+        time.sleep(0.05)
+
+    return audio_path

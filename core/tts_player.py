@@ -154,4 +154,4 @@ class TTSPlayer:
 # Dual Engine TTS Player
 tts_main = TTSPlayer()
 tts_summary = TTSPlayer()
-tts = tts_main
+tts_prompt = TTSPlayer()

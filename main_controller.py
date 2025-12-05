@@ -10,7 +10,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from core.stt import listen
-from core.tts import speak
+from core.tts import speak, speak_blocking
 from core.logger import log
 from core.utils import absolute_path
 
@@ -60,7 +60,7 @@ def linux_stop_listener():
     while True:
         if os.path.exists("/tmp/stop.txt"):
             print("[STOP] Emergency stop signal detected via /tmp/stop.txt.")
-            speak("Emergency stop activated.")
+            speak_blocking("Emergency stop activated.")
             kill_all_processes()
             os._exit(0)
         time.sleep(1)
@@ -75,7 +75,7 @@ def start_process(relative_path):
     target = absolute_path(relative_path)
 
     if not os.path.exists(target):
-        speak(f"Module {relative_path} not found.")
+        speak_blocking(f"Module {relative_path} not found.")
         log("MAIN", relative_path, "Missing module")
         return
 
@@ -91,7 +91,7 @@ def start_process(relative_path):
 
     except Exception as e:
         log("MAIN", relative_path, f"Launch error: {e}")
-        speak("Unable to launch module.")
+        speak_blocking("Unable to launch module.")
 
 
 # ================================================================
@@ -99,7 +99,7 @@ def start_process(relative_path):
 # ================================================================
 
 def main():
-    speak("System ready. Say read, detect, or exit.")
+    speak_blocking("System ready. Say read, detect, or exit.")
     print("[MAIN] Awaiting commands...")
 
     # Start RPi-safe STOP listener
@@ -115,25 +115,25 @@ def main():
 
         # Reading module
         if "read" in cmd:
-            speak("Opening reading module.")
+            speak_blocking("Opening reading module.")
             log("MAIN", "-", "Launch reading")
             start_process("reading/read.py")
             continue
 
         # Object detection module
         if "detect" in cmd or "object" in cmd:
-            speak("Opening object detection module.")
+            speak_blocking("Opening object detection module.")
             log("MAIN", "-", "Launch YOLO")
             start_process("yolo/detect.py")
             continue
 
         # Exit
         if "exit" in cmd or "quit" in cmd:
-            speak("Goodbye.")
+            speak_blocking("Goodbye.")
             kill_all_processes()
             break
 
-        speak("I did not understand.")
+        speak_blocking("I did not understand.")
         log("MAIN", "-", f"Unknown command: {cmd}")
 
 
