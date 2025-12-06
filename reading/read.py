@@ -338,12 +338,16 @@ def main():
                                 "Generating summary.",
                                 "generating_summary.wav"
                             )
+
                             tts_prompt.play(generating_summary_audio)
+
 
                             summary_text = summarize(" ".join(read_so_far))
                             summary_audio = speak(summary_text)
                             tts_summary.play(summary_audio)
 
+                            print("================SUMMARY=================")
+                            print(summary_text)
                             print("Summary mode — press 's' to stop")
 
                             while True:
@@ -394,7 +398,7 @@ def main():
                     tts_prompt.play(voice_intro_audio)
 
                     failures = 0
-                    MAX_FAILURES = 5
+                    MAX_FAILURES = 1
 
                     while failures < MAX_FAILURES:
                         command = listen_for_command()
@@ -449,6 +453,8 @@ def main():
                             summary_audio = speak(summary_text)
                             tts_summary.play(summary_audio)
 
+                            print("================SUMMARY=================")
+                            print(summary_text)
                             print("Summary mode — press 's' to stop")
 
                             while True:

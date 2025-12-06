@@ -8,7 +8,7 @@ import re
 from typing import List
 
 
-def split_into_sentences(text: str, min_len: int = 10, max_len: int = 20) -> List[str]:
+def split_into_sentences(text: str, min_len: int = 10, max_len: int = 50) -> List[str]:
     """
     Split text into 'forgiving' sentence chunks.
 
@@ -27,7 +27,7 @@ def split_into_sentences(text: str, min_len: int = 10, max_len: int = 20) -> Lis
         return []
 
     # Basic split on sentence-ending punctuation + whitespace
-    raw_chunks = re.split(r'(?<=[.!?])[\r\n\s]+', text)
+    raw_chunks = re.split(r'(?<=[.!?,])[\r\n\s]+', text)
 
     # Clean up whitespace and remove empties
     cleaned = [chunk.strip() for chunk in raw_chunks if chunk and chunk.strip()]
