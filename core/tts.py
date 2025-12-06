@@ -1,68 +1,39 @@
 # core/tts.py
 # ================================================================
-#  GOOGLE CLOUD TEXT-TO-SPEECH (Commit 3)
-#  - Generates WAV files only
-#  - NO playback (no blocking)
-#  - Returns audio path for TTSPlayer to use later
+# GOOGLE CLOUD TEXT-TO-SPEECH (Cleaned Version)
+# - Generates WAV files only (LINEAR16 PCM)
+# - No playback, no blocking logic
+# - All prompts cached as WAV for Pi stability
 # ================================================================
 
 import os
-import shutil
 import time
 import datetime
-from google.cloud import texttospeech
-from google.oauth2 import service_account
-from core.utils import absolute_path, ensure_dir, load_credential_path
-from core.logger import log
 import soundfile as sf
 
-PROMPT_CACHE_DIR = absolute_path("results", "prompt_cache")
-ensure_dir(PROMPT_CACHE_DIR)
+from google.cloud import texttospeech
+from google.oauth2 import service_account
 
-def speak_cached(text: str, filename: str):
-    """
-    Generate TTS audio for a prompt ONCE, convert it to WAV (int16 PCM),
-    and reuse the WAV file on all future calls.
-
-    This avoids MP3 decoding during playback and prevents ALSA underruns.
-    """
-    cached_wav = os.path.join(PROMPT_CACHE_DIR, filename)
-
-    # If WAV version is already cached, use it
-    if os.path.exists(cached_wav):
-        return cached_wav
-
-    # ---- Step 1: generate the TTS file (likely MP3) ----
-    generated_path = speak(text)   # your TTS output
-
-    if generated_path is None or not os.path.exists(generated_path):
-        print("[speak_cached] ERROR: speak() returned no file.")
-        return None
-
-    # ---- Step 2: convert generated audio → WAV PCM ----
-    try:
-        data, samplerate = sf.read(generated_path, dtype="int16")
-        sf.write(cached_wav, data, samplerate, format="WAV")
-    except Exception as e:
-        print(f"[speak_cached] ERROR converting to WAV: {e}")
-        return generated_path  # fallback (not ideal but safe)
-
-    return cached_wav
+from core.utils import absolute_path, ensure_dir, load_credential_path
+from core.logger import log
 
 # ================================================================
-#   DIRECTORIES
+# DIRECTORIES
 # ================================================================
 AUDIO_DIR = absolute_path("results", "audio_outputs")
+PROMPT_CACHE_DIR = absolute_path("results", "prompt_cache")
+
 ensure_dir(AUDIO_DIR)
+ensure_dir(PROMPT_CACHE_DIR)
 
 # ================================================================
-#   GOOGLE CREDENTIALS
+# GOOGLE CREDENTIALS
 # ================================================================
 CRED_PATH = load_credential_path("core", "tts-key.json")
-
 tts_client = None
 
 def init_tts():
+    """Initialize Google Cloud TTS client."""
     global tts_client
     try:
         creds = service_account.Credentials.from_service_account_file(CRED_PATH)
@@ -72,20 +43,56 @@ def init_tts():
         print(f"[TTS] ERROR loading credentials: {e}")
         tts_client = None
 
-# Initialize on import
+# Initialize immediately
 init_tts()
 
+
 # ================================================================
-#   SPEAK (Commit 3: generate audio only, no playback)
+# speak_cached()
+# - Generate once → store WAV → reuse always
+# - Prevents Pi underruns because final output is LINEAR16
+# ================================================================
+def speak_cached(text: str, filename: str):
+    """
+    Generate TTS audio for a prompt ONCE, store as WAV, and reuse thereafter.
+    Ensures Pi-safe audio playback with no MP3 decoding.
+    """
+    cached_wav = os.path.join(PROMPT_CACHE_DIR, filename)
+
+    # Already cached? use it
+    if os.path.exists(cached_wav):
+        return cached_wav
+
+    # Generate speech
+    generated_path = speak(text)
+
+    if not generated_path or not os.path.exists(generated_path):
+        print("[speak_cached] ERROR: speak() returned no audio.")
+        return None
+
+    # Convert to WAV PCM int16 (safe for Pi)
+    try:
+        data, samplerate = sf.read(generated_path, dtype="int16")
+        sf.write(cached_wav, data, samplerate, format="WAV")
+    except Exception as e:
+        print(f"[speak_cached] ERROR converting to WAV: {e}")
+        # Fallback: use the generated WAV (unlikely to fail)
+        return generated_path
+
+    return cached_wav
+
+
+# ================================================================
+# speak()
+# - Generate TTS WAV
+# - No playback logic inside
+# - Returns path for TTSPlayer
 # ================================================================
 def speak(text: str):
     """
     Convert text → speech using Google Cloud TTS.
-    Commit 3:
-        - DOES NOT PLAY AUDIO
-        - RETURNS the generated WAV file path
+    Returns the path to the generated WAV.
     """
-
     if not tts_client:
         print("[TTS] Client not initialized.")
         return None
@@ -100,9 +107,11 @@ def speak(text: str):
     )
 
     audio_config = texttospeech.AudioConfig(
+        # Output directly as WAV (LINEAR16 PCM)
         audio_encoding=texttospeech.AudioEncoding.LINEAR16
     )
 
+    # Generate TTS
     try:
         response = tts_client.synthesize_speech(
             input=synthesis_input,
@@ -113,44 +122,20 @@ def speak(text: str):
         log("TTS", "-", f"TTS ERROR: {e}")
         return None
 
-    # Generate output file path
+    # Output filename
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     audio_path = absolute_path("results", "audio_outputs", f"tts_{ts}.wav")
 
+    # Save WAV bytes
     try:
-        print(f"[TTSPlayer] Audio stream written in {audio_path}")
         with open(audio_path, "wb") as f:
             f.write(response.audio_content)
+        print(f"[TTS] Audio written: {audio_path}")
     except Exception as e:
         log("TTS", "-", f"File write error: {e}")
         return None
 
     t1 = time.time()
     log("TTS", audio_path, f"Generated {len(text)} chars", round(t1 - t0, 2))
-
-    # ❗RETURN THE AUDIO FILE PATH (Commit 3 change)
-    return audio_path
-
-import time
-
-def speak_blocking(text: str):
-    """
-    Synthesize text → audio and play it IN BLOCKING MODE using tts_prompt.
-    Used for system-level instructions that must finish before continuing.
-    """
-    from core.tts import speak       # keeps layering clean
-    from core.tts_player import tts_prompt
-
-    # Generate wav file
-    audio_path = speak(text)
-    if not audio_path:
-        return None
-
-    # Play using prompt engine
-    tts_prompt.play(audio_path)
-
-    # Block until finished
-    while tts_prompt.is_playing():
-        time.sleep(0.05)
 
     return audio_path
