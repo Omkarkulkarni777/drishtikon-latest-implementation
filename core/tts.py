@@ -118,6 +118,7 @@ def speak(text: str):
     audio_path = absolute_path("results", "audio_outputs", f"tts_{ts}.wav")
 
     try:
+        print(f"[TTSPlayer] Audio stream written in {audio_path}")
         with open(audio_path, "wb") as f:
             f.write(response.audio_content)
     except Exception as e:

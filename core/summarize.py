@@ -62,9 +62,6 @@ def summarize(text: str) -> str:
 
     duration = round(time.time() - t0, 2)
     log("SUMMARY", "-", f"{len(summary_text)} chars in {duration}s")
-    speak("Summary:")
-    speak(summary_text)
-    speak(f"{len(summary_text)} characters in {duration} seconds")
 
     return summary_text
 
