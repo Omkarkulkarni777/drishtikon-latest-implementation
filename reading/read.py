@@ -318,6 +318,7 @@ def main():
                         # RESUME → restart the current sentence
                         if choice == "r":
                             tts_prompt.play(resume_beep)
+                            time.sleep(0.5)
                             sentence_audio = speak(sentence)
                             tts_main.play(sentence_audio)
                             break
@@ -362,6 +363,7 @@ def main():
                                         )
                                         tts_prompt.play(stopping_audio)
                                         tts_summary.stop()
+                                        time.sleep(1)
                                         break
 
                                 time.sleep(0.05)
@@ -469,6 +471,7 @@ def main():
                                         )
                                         tts_prompt.play(stopping_audio)
                                         tts_summary.stop()
+                                        time.sleep(1)
                                         break
 
                                 time.sleep(0.05)
@@ -479,6 +482,7 @@ def main():
                                 "back_voice.wav"
                             )
                             tts_prompt.play(back_voice_audio)
+                            time.sleep(1)
                             continue
 
                         else:
