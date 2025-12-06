@@ -6,7 +6,7 @@
 
 import time
 from core.stt import listen
-from core.prompts import vb_retry_p  # cached retry prompt
+from core.prompts import vc_retry_p
 from core.tts_player import tts_main    # use tts_main as unified prompt engine
 
 
@@ -38,7 +38,7 @@ def listen_for_command(max_attempts=3):
     """
     Attempt STT max_attempts times.
     Returns the recognized command or None if failed.
-    Uses pre‑cached retry prompt audio.
+    Uses pre-cached retry prompt audio.
     """
 
     attempts = 0
