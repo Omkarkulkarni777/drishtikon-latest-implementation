@@ -1,7 +1,6 @@
 # core/stt_commands.py
 # ================================================================
 # STT COMMAND NORMALIZATION + RETRY LOGIC
-# Cleaned to match new architecture (no speak_blocking, no tts_prompt)
 # ================================================================
 
 import time

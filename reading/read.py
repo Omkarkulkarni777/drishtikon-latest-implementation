@@ -186,7 +186,7 @@ def capture_image():
 # ================================================================
 def main():
     ensure_results_dir()
-
+    reading_complete = False
     # ---------------------------------------------------------
     # INTRO PROMPT
     # ---------------------------------------------------------
@@ -304,7 +304,7 @@ def main():
         while True:
             if not tts_main.is_playing():
                 break
-
+                
             # Non-blocking keypress
             if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
                 key = sys.stdin.readline().strip().lower()
@@ -313,11 +313,11 @@ def main():
                 # (p) — PAUSE
                 # =====================================================
                 if key == "p":
+                    tts_main.play(pause_beep)
                     tts_main.stop()
                     tts_summary.stop()
                     # time.sleep(1.0)
 
-                    tts_main.play(pause_beep)
                     time.sleep(0.3)
                     
                     # ----- PAUSE MENU -----
@@ -332,11 +332,11 @@ def main():
 
                         # RESUME → restart sentence from start
                         if choice == "p":
+                            tts_main.play(resume_beep)
                             tts_main.stop()
                             tts_summary.stop()
-                            time.sleep(1.0)
+                            # time.sleep(1.0)
 
-                            tts_main.play(resume_beep)
                             time.sleep(0.3)
 
                             sentence_audio = speak(sentence)
@@ -407,6 +407,14 @@ def main():
 
                         # QUIT
                         elif choice == "q":
+                            import pickle
+                            reading_complete_track_file = absolute_path('results', 'reading_complete_track_file.pickle')
+                            read_so_far_track_file = absolute_path('results', 'read_so_far_track_file.pickle')
+                            with open(reading_complete_track_file, 'wb') as file_object:
+                                pickle.dump(reading_complete, file_object)
+                            with open(read_so_far_track_file, 'wb') as file_object:
+                                pickle.dump(current_index, file_object)
+                                
                             tts_main.stop()
                             tts_summary.stop()
                             time.sleep(1.0)
@@ -453,6 +461,13 @@ def main():
 
                     # QUIT
                     elif command == "quit":
+                        import pickle
+                        reading_complete_track_file = absolute_path('results', 'reading_complete_track_file.pickle')
+                        read_so_far_track_file = absolute_path('results', 'read_so_far_track_file.pickle')
+                        with open(reading_complete_track_file, 'wb') as file_object:
+                            pickle.dump(reading_complete, file_object)
+                        with open(read_so_far_track_file, 'wb') as file_object:
+                            pickle.dump(read_so_far, file_object)
                         tts_main.stop()
                         tts_summary.stop()
                         time.sleep(1.0)
@@ -551,6 +566,11 @@ def main():
     # ---------------------------------------------------------
     # ALL SENTENCES COMPLETE
     # ---------------------------------------------------------
+    if reading_complete == False:
+        reading_complete = True
+        if os.path.exists(read_so_far_track_file):
+            os.remove(read_so_far_track_file)
+    
     tts_main.stop()
     tts_summary.stop()
     time.sleep(1.0)
