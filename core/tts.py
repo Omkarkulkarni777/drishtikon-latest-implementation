@@ -19,21 +19,35 @@ import soundfile as sf
 PROMPT_CACHE_DIR = absolute_path("results", "prompt_cache")
 ensure_dir(PROMPT_CACHE_DIR)
 
-def speak_cached(text, filename):
-    path = os.path.join(PROMPT_CACHE_DIR, filename)
+def speak_cached(text: str, filename: str):
+    """
+    Generate TTS audio for a prompt ONCE, convert it to WAV (int16 PCM),
+    and reuse the WAV file on all future calls.
 
-    # If cached WAV exists, return it
-    if os.path.exists(path):
-        return path
+    This avoids MP3 decoding during playback and prevents ALSA underruns.
+    """
+    cached_wav = os.path.join(PROMPT_CACHE_DIR, filename)
 
-    # Generate (MP3 or WAV depending on your TTS)
-    audio_path = speak(text)   # currently returns MP3
+    # If WAV version is already cached, use it
+    if os.path.exists(cached_wav):
+        return cached_wav
 
-    # Convert to WAV for safe playback
-    data, samplerate = sf.read(audio_path, dtype='int16')
-    sf.write(path, data, samplerate, format='WAV')
+    # ---- Step 1: generate the TTS file (likely MP3) ----
+    generated_path = speak(text)   # your TTS output
 
-    return path
+    if generated_path is None or not os.path.exists(generated_path):
+        print("[speak_cached] ERROR: speak() returned no file.")
+        return None
+
+    # ---- Step 2: convert generated audio → WAV PCM ----
+    try:
+        data, samplerate = sf.read(generated_path, dtype="int16")
+        sf.write(cached_wav, data, samplerate, format="WAV")
+    except Exception as e:
+        print(f"[speak_cached] ERROR converting to WAV: {e}")
+        return generated_path  # fallback (not ideal but safe)
+
+    return cached_wav
 
 # ================================================================
 #   DIRECTORIES
