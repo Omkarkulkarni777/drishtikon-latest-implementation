@@ -96,7 +96,6 @@ def main():
             if not ret:
                 break
             img_path = absolute_path("results", "gemini_cache", "live.jpg")
-            cv2.imwrite(img_path, frame)
 
         # --------------------------------------------------------
         # Wait for user intent
@@ -110,6 +109,7 @@ def main():
             play(tts_main, generating_answer_p)
 
             try:
+                cv2.imwrite(img_path, frame)
                 text = gemini_scene_summary(img_path)
                 audio_path = speak(text)
 
