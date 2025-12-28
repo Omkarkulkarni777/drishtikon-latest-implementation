@@ -88,14 +88,6 @@ def main():
     print("\n[g] Describe scene | [q] Quit\n")
 
     while True:
-        # --------------------------------------------------------
-        # Capture frame if camera is active
-        # --------------------------------------------------------
-        if cam:
-            ret, frame = cam.read()
-            if not ret:
-                break
-            img_path = absolute_path("results", "gemini_cache", "live.jpg")
 
         # --------------------------------------------------------
         # Wait for user intent
@@ -106,6 +98,15 @@ def main():
         # Gemini summary
         # --------------------------------------------------------
         if key == "g":
+            # --------------------------------------------------------
+            # Capture frame if camera is active
+            # --------------------------------------------------------
+            if cam:
+                ret, frame = cam.read()
+                if not ret:
+                    break
+                img_path = absolute_path("results", "gemini_cache", "live.jpg")
+
             play(tts_main, generating_answer_p)
 
             try:
