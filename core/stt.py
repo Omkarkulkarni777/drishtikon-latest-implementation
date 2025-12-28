@@ -13,6 +13,7 @@ from core.utils import load_credential_path
 from core.logger import log
 
 LANGUAGE_CODE = "en-US"
+LANGUAGE_CODE_IN = "en-IN"
 SILENCE_THRESHOLD = 3.0
 SILENCE_RMS_THRESHOLD = 100
 TARGET_RMS = 2000
@@ -154,7 +155,7 @@ class STTManager:
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
                 sample_rate_hertz=SAMPLE_RATE,
-                language_code=LANGUAGE_CODE,
+                language_code=LANGUAGE_CODE_IN,
                 enable_automatic_punctuation=True,
                 audio_channel_count=CHANNELS,
                 model="command_and_search"
