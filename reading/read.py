@@ -29,7 +29,7 @@ from core.query import answer_query
 from core.prompts import *
 from core.state import *
 from core.playback_controls import play, non_blocking_play, read_key_nonblocking, wait_for_key
-from reading.rag import upload_text_to_store, rag_query_voice
+from reading.rag import main_rag, upload_text_to_store, rag_query_voice
 
 load_dotenv()
 # ================================================================
@@ -464,8 +464,7 @@ def main():
                         play(tts_main, generating_answer_p)
                         # --- RAG CALL ---
                         task = LLMTask(
-                            rag_query_voice,
-                            question
+                            main_rag
                         )
 
                         answer = run_llm_task(task)

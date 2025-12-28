@@ -25,7 +25,8 @@ def split_into_sentences_rag(
     if not text:
         return []
     
-    text = text.replace("*", "")
+    text = text.translate(str.maketrans("", "", "\"'“”‘’*"))
+
     # Split after sentence-like punctuation, keep punctuation attached
     raw_chunks = re.split(r'(?<=[.!?;])', text)
 

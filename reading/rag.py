@@ -166,7 +166,7 @@ def rag_query_voice(question: str) -> str:
     answer = rag_query(question, store_name)
     return answer
 
-def main():
+def main_rag():
     # Announce rag mode
     while True:
         play(tts_main, ask_query_intro_p)
@@ -206,4 +206,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_rag()
