@@ -1,20 +1,18 @@
 # navigation/navigate.py
 
-from core.playback_controls import non_blocking_play, play
 from core.tts import speak
 from core.tts_player import tts_main
-from core.priority_audio import PriorityAudioManager
+from core.playback_controls import non_blocking_play, play
 from core.prompts import dest_not_p, path_not_found_p, navigation_stop_p
 
 from navigation.destination_input import get_source_and_nearby_place
 from navigation.maps_client import get_route
-from navigation.navigation_logic import build_direction_gist
+from navigation.navigation_utils import build_direction_gist
 
 
 def main():
-    priority_audio = PriorityAudioManager(tts_main)
 
-    source, nearby_request = get_source_and_nearby_place(priority_audio)
+    source, nearby_request = get_source_and_nearby_place()
     if not source and not nearby_request:
         play(tts_main, navigation_stop_p)
         
@@ -32,7 +30,7 @@ def main():
     )
     wants_to_break_loop = non_blocking_play(tts_main, eta_audio, in_a_loop=True)
     if wants_to_break_loop:
-        return None, None
+        return
 
     # Speak gist
     gist_text = build_direction_gist(route["steps"])

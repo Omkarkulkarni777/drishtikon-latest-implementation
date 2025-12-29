@@ -1,7 +1,7 @@
 # navigation/destination_input.py
 
 from core.tts_player import tts_main
-from core.playback_controls import non_blocking_play, play
+from core.playback_controls import play
 from core.stt import listen_continuous
 from core.tts import speak
 from core.prompts import (
@@ -11,7 +11,7 @@ from core.prompts import (
     navigation_dest_err_p
 )
 
-def get_source_and_nearby_place(priority_audio):
+def get_source_and_nearby_place():
     # Ask for source
     play(tts_main, navigation_src_p)
     source = listen_continuous()
