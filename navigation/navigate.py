@@ -15,13 +15,18 @@ def main():
     source, nearby_request = get_source_and_nearby_place()
     if not source and not nearby_request:
         play(tts_main, navigation_stop_p)
+        return
         
     if not nearby_request:
         play(tts_main, dest_not_p)
+        play(tts_main, navigation_stop_p)
+        return
 
     route = get_route(origin_coords=source, nearby_query=nearby_request)
     if not route:
         play(tts_main, path_not_found_p)
+        play(tts_main, navigation_stop_p)
+        return
 
     # Speak ETA
     eta_audio = speak(
@@ -30,6 +35,7 @@ def main():
     )
     wants_to_break_loop = non_blocking_play(tts_main, eta_audio, in_a_loop=True)
     if wants_to_break_loop:
+        play(tts_main, navigation_stop_p)
         return
 
     # Speak gist
