@@ -3,7 +3,7 @@
 from core.tts import speak
 from core.tts_player import tts_main
 from core.playback_controls import non_blocking_play, play
-from core.prompts import dest_not_p, path_not_found_p, navigation_stop_p
+from core.prompts import path_not_found_p, navigation_stop_p
 
 from navigation.destination_input import get_source_and_nearby_place
 from navigation.maps_client import get_route
@@ -13,12 +13,11 @@ from navigation.navigation_utils import build_direction_gist
 def main():
 
     source, nearby_request = get_source_and_nearby_place()
-    if not source and not nearby_request:
+    if not source:
         play(tts_main, navigation_stop_p)
         return
         
     if not nearby_request:
-        play(tts_main, dest_not_p)
         play(tts_main, navigation_stop_p)
         return
 

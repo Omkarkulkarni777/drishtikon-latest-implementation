@@ -26,7 +26,7 @@ def get_source_and_nearby_place():
 
     if not nearby_request:
         play(tts_main, navigation_dest_err_p)
-        return None, None
+        return source, None
 
     confirm_audio = speak(
         f"You are at {source}. Looking for {nearby_request}."
