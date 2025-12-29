@@ -9,7 +9,7 @@ from PIL import Image
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-from core.utils import absolute_path, ensure_dir, load_credential_path
+from core.utils import absolute_path, ensure_dir, load_credential_path, timeit
 from core.tts import speak
 from core.tts_player import tts_main
 from core.playback_controls import play, non_blocking_play, wait_for_key
@@ -41,13 +41,13 @@ You are assisting a visually impaired user.
 
 Describe only what requires attention right now.
 Focus on obstacles, people, vehicles, or hazards.
-Use at most four short sentences.
 Be concise and calm.
 """
 
 # ================================================================
 #  GEMINI SCENE SUMMARY
 # ================================================================
+@timeit("[DUMMY DETECTION GEMINI SCENE SUMMARY]")
 def gemini_scene_summary(image_path: str) -> str:
     img = Image.open(image_path)
     if img.mode == "RGBA":
@@ -68,6 +68,7 @@ def gemini_scene_summary(image_path: str) -> str:
 # ================================================================
 #  MAIN LOOP
 # ================================================================
+@timeit("[DUMMY DETECTION MAIN]")
 def main():
     ensure_dir(absolute_path("results", "gemini_cache"))
 
@@ -76,6 +77,7 @@ def main():
     # ------------------------------------------------------------
     # Image selection
     # ------------------------------------------------------------
+    img_chosen = True
     root = tk.Tk()
     root.withdraw()
     img_path = filedialog.askopenfilename()
@@ -83,6 +85,7 @@ def main():
 
     cam = None
     if not img_path:
+        img_chosen = False
         cam = cv2.VideoCapture(0)
 
     print("\n[g] Describe scene | [q] Quit\n")
@@ -110,7 +113,8 @@ def main():
             play(tts_main, generating_answer_p)
 
             try:
-                cv2.imwrite(img_path, frame)
+                if not img_chosen:
+                    cv2.imwrite(img_path, frame)
                 text = gemini_scene_summary(img_path)
                 audio_path = speak(text)
 
