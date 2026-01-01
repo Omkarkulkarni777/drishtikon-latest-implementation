@@ -9,6 +9,7 @@ from PIL import Image
 from dotenv import load_dotenv
 import google.generativeai as genai
 
+from core.stt import listen_continuous
 from core.utils import absolute_path, ensure_dir, load_credential_path, timeit
 from core.tts import speak
 from core.tts_player import tts_main
@@ -16,7 +17,8 @@ from core.playback_controls import play, non_blocking_play, wait_for_key
 from core.prompts import (
     select_file_p,
     generating_answer_p,
-    exiting_detection_module_p
+    exiting_detection_module_p,
+    ask_query_intro_p
 )
 
 load_dotenv()
@@ -48,7 +50,7 @@ Be concise and calm.
 #  GEMINI SCENE SUMMARY
 # ================================================================
 @timeit("[DUMMY DETECTION GEMINI SCENE SUMMARY]")
-def gemini_scene_summary(image_path: str) -> str:
+def gemini_scene_summary(image_path: str, user_query: str = None) -> str:
     img = Image.open(image_path)
     if img.mode == "RGBA":
         img = img.convert("RGB")
@@ -57,10 +59,15 @@ def gemini_scene_summary(image_path: str) -> str:
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=75)
 
+    if not user_query:
+        user_query = GEMINI_SCENE_PROMPT
+    
+    user_query += "\nIMAGE DOES NOT HAVE THE USER. IT IS TAKEN BY THE USER. IT IS NOT A SELFIE. DO NOT include asterisks, quotes, or any formatting. LESS THAN 60 WORDS."
+
     model = genai.GenerativeModel(GEMINI_MODEL)
     response = model.generate_content([
         {"mime_type": "image/jpeg", "data": buf.getvalue()},
-        GEMINI_SCENE_PROMPT
+        user_query
     ])
 
     return getattr(response, "text", "I could not understand the scene.")
@@ -110,12 +117,13 @@ def main():
                     break
                 img_path = absolute_path("results", "gemini_cache", "live.jpg")
 
-            play(tts_main, generating_answer_p)
-
             try:
                 if not img_chosen:
                     cv2.imwrite(img_path, frame)
-                text = gemini_scene_summary(img_path)
+                play(tts_main, ask_query_intro_p)
+                user_query = listen_continuous()
+                play(tts_main, generating_answer_p)
+                text = gemini_scene_summary(img_path, user_query)
                 audio_path = speak(text)
 
                 non_blocking_play(

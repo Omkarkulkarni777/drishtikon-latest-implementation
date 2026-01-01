@@ -164,7 +164,7 @@ def capture_image():
                 continue
             
             cv2.imshow("Camera Capture - Press SPACE", frame)
-            key = listen_continuous()
+            key = listen_for_command(is_question=True)
             
             if "capture" in key:  # SPACE
                 time.sleep(3)
