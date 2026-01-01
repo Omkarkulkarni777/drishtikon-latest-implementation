@@ -24,7 +24,10 @@ VALID_COMMANDS = {
     "x": ["query", "doubt", "question", "axe", "ask", "text", "next", "tax"],
     
     # Goal: Search, RAG, Look up, Find
-    "r": ["search", "surge", "suraj", "rag", "look", "find", "track", "are", "arg", "art", "rock", "wreck"]
+    "r": ["search", "surge", "suraj", "rag", "look", "find", "track", "are", "arg", "art", "rock", "wreck"],
+    
+    # Goal: Yes when asked to continue previous task
+    "y": ["yes"]
 }
 
 def normalize_command(text):
