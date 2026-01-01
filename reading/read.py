@@ -38,6 +38,14 @@ Device.pin_factory = LGPIOFactory()
 
 load_dotenv()
 button = Button(17)
+button_event = None
+
+def on_button_pressed():
+    global button_event
+    button_event = "v"
+    print("[GPIO] Button pressed → v")
+
+button.when_pressed = on_button_pressed
 
 # ================================================================
 #  GOOGLE CREDENTIALS
@@ -353,7 +361,12 @@ def main():
                 current_index += 1
             else:
                 # Non-blocking keypress
-                key = wait_for_button()
+                key = None
+                
+                global button_event
+                if button_event:
+                    key = button_event
+                    button_event = None
 
             # =====================================================
             # (p) — PAUSE
@@ -615,7 +628,8 @@ def main():
                 play(tts_main, pause_beep)
                 current_index -= 1
                 continue
-
+            
+            time.sleep(0.05)
         # Finished this sentence
         read_so_far.append(sentence)
         current_index += 1
