@@ -406,7 +406,7 @@ def main():
                         play(tts_main, generating_answer_p)
                         
                         task = LLMTask(
-                            main_rag,
+                            rag_query_voice,
                             question
                         )
 
@@ -517,28 +517,13 @@ def main():
                         break
 
                     elif choice == "r":
-                        play(tts_main, ask_query_intro_p)
-                        question = listen_continuous()
-                        
-                        if question is None or not question.strip() or helper_for_exit(question) == "q":
-                            play(tts_main, vc_back_p)
-                            continue
-                            
-                        play(tts_main, generating_answer_p)
                         task = LLMTask(main_rag)
-
                         answer = run_llm_task(task)
-                        print("\n========RAG ANSWER=======\n")
-                        print(answer)
-
-                        if not answer or not answer.strip() or answer.startswith("RAG Query Error"):
-                            play(tts_main, vc_back_p)
-                            continue
                         
-                        answer_audio = speak(answer)
-                        non_blocking_play(tts_main, answer_audio, "Press 's' to stop response", stopping_response_p)
-                        play(tts_main, vc_back_p)
-                        continue
+                        if not answer or not answer.strip() or answer.startswith("RAG Query Error"):
+                            play(tts_main, could_not_find_answer_p)
+                            play(tts_main, back_pause_menu_p)
+                            continue
 
                     elif choice == "m":
                         if not read_so_far:
@@ -605,7 +590,7 @@ def main():
                     else:
                         print("Invalid option.")
                         continue
-
+            
             # =====================================================
             # (n) -> NEXT SENTENCE
             # =====================================================
