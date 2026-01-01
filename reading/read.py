@@ -164,16 +164,17 @@ def capture_image():
                 continue
             
             cv2.imshow("Camera Capture - Press SPACE", frame)
-            key = cv2.waitKey(1)
+            key = listen_continuous()
             
-            if key == 32:  # SPACE
+            if "capture" in key:  # SPACE
+                time.sleep(3)
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 path = absolute_path("results", "reading_inputs", f"capture_{ts}.jpg")
                 cv2.imwrite(path, frame)
                 cam.release()
                 cv2.destroyAllWindows()
                 return path
-            elif key == 27:  # ESC
+            elif "escape" in key:  # ESC
                 break
         
         cam.release()
