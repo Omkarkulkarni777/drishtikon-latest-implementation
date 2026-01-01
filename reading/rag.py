@@ -166,44 +166,57 @@ def rag_query_voice(question: str) -> str:
     answer = rag_query(question, store_name)
     return answer
 
-def main_rag():
+def main_rag(from_main_controller=True):
     # Announce rag mode
-	play(tts_main, ask_query_intro_p)
-	# Listen for user's voice question
-	question = listen_continuous()
-	if question is None or not question.strip() or helper_for_exit(question) == "q":
-		# No question → back to voice mode
-		play(tts_main, exiting_search_module_p)
-		return
+    while True:
+        play(tts_main, ask_query_intro_p)
 
-	else:    
-		# Generate RAG answer
-		play(tts_main, generating_answer_p)
-		# --- RAG CALL ---
-		task = LLMTask(
-			rag_query_voice,
-			question
-		)
+        # Listen for user's voice question
+        question = listen_continuous()
+        if question is None or not question.strip() or helper_for_exit(question) == "q":
+            # No question → back to voice mode
+            play(tts_main, exiting_search_module_p)
+            break
 
-		answer = run_llm_task(task)
-		print("\n========RAG ANSWER=======\n")
-		print(answer)
-		sentences = split_into_sentences_rag(answer)
-		
-		if not answer or not answer.strip() or answer.startswith("RAG Query Error"):
-			play(tts_main, exiting_search_module_p)
-			return
-		else:
-			# Speak the answer
-			for i in range(len(sentences)):
-				answer_audio = speak(sentences[i])
-				wants_to_break_loop = non_blocking_play(tts_main, answer_audio, "Press 's' to stop response", stopping_response_p, in_a_loop=True)
-				if wants_to_break_loop:
-					break
-			# Finished answer → back to voice mode
-			play(tts_main, vc_back_p)
-		
-	return answer
+        # Generate RAG answer
+        play(tts_main, generating_answer_p)
+
+        # --- RAG CALL ---
+        task = LLMTask(
+            rag_query_voice,
+            question
+        )
+
+        answer = run_llm_task(task)
+        print("\n========RAG ANSWER=======\n")
+        print(answer)
+
+        sentences = split_into_sentences_rag(answer)
+
+        if not answer or not answer.strip() or answer.startswith("RAG Query Error"):
+            play(tts_main, exiting_search_module_p)
+            break
+
+        # Speak the answer
+        for sentence in sentences:
+            answer_audio = speak(sentence)
+            wants_to_break_loop = non_blocking_play(
+                tts_main,
+                answer_audio,
+                "Press 's' to stop response",
+                stopping_response_p,
+                in_a_loop=True
+            )
+
+            if wants_to_break_loop:
+                if not from_main_controller:
+                    return answer
+                else:
+                    break
+
+        if not from_main_controller:
+            return answer
+
 
 if __name__ == "__main__":
     main_rag()

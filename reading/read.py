@@ -517,13 +517,12 @@ def main():
                         break
 
                     elif choice == "r":
-                        task = LLMTask(main_rag)
+                        from_main_controller = False
+                        task = LLMTask(main_rag, from_main_controller)
                         answer = run_llm_task(task)
-                        
-                        if not answer or not answer.strip() or answer.startswith("RAG Query Error"):
-                            play(tts_main, could_not_find_answer_p)
-                            play(tts_main, back_pause_menu_p)
-                            continue
+                        print("\n========RAG ANSWER=======\n")
+                        print(answer)
+                        play(tts_main, vc_back_p)
 
                     elif choice == "m":
                         if not read_so_far:
