@@ -19,14 +19,24 @@ Device.pin_factory = LGPIOFactory()
 
 button = Button(17)
 
+
+BUTTON_COOLDOWN = 0.5  # seconds
+_last_press_time = 0
+
 # Single event (poll-based)
 button_event = None
 
 
 def _on_button_pressed():
-    global button_event
+    global button_event, _last_press_time
+    now = time.monotonic()
+
+    if now - _last_press_time < BUTTON_COOLDOWN:
+        return  # ignore bounce / rapid re-press
+
+    _last_press_time = now
     button_event = "v"
-    print("[GPIO] Button pressed → v")
+    print("[GPIO] Button accepted → v")
 
 
 button.when_pressed = _on_button_pressed
