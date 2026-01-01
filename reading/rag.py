@@ -203,7 +203,7 @@ def main_rag(from_main_controller=True):
             wants_to_break_loop = non_blocking_play(
                 tts_main,
                 answer_audio,
-                "Press 's' to stop response",
+                "Press button to stop response",
                 stopping_response_p,
                 in_a_loop=True
             )

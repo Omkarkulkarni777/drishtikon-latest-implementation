@@ -12,7 +12,6 @@ from PIL import Image
 import io
 from dotenv import load_dotenv
 import google.generativeai as genai
-from gpiozero import Button
 
 from core.config import init_gemini
 from core.constants import RESULTS_DIR, AUDIO_DIR, PROMPT_CACHE_DIR, READING_INPUTS_DIR, SENTENCE_CACHE_DIR, SUMMARY_CACHE_DIR
@@ -29,23 +28,11 @@ from core.summarize import summarize
 from core.query import answer_query
 from core.prompts import *
 from core.state import *
-from core.playback_controls import play, non_blocking_play, read_key_nonblocking, wait_for_key
+from core import playback_controls
+from core.playback_controls import play, non_blocking_play, read_key_nonblocking, wait_for_key, wait_for_button, button_event
 from reading.rag import main_rag, upload_text_to_store, rag_query_voice
-from gpiozero import Device
-from gpiozero.pins.lgpio import LGPIOFactory
-
-Device.pin_factory = LGPIOFactory()
 
 load_dotenv()
-button = Button(17)
-button_event = None
-
-def on_button_pressed():
-    global button_event
-    button_event = "v"
-    print("[GPIO] Button pressed → v")
-
-button.when_pressed = on_button_pressed
 
 # ================================================================
 #  GOOGLE CREDENTIALS
@@ -195,16 +182,6 @@ def capture_image():
     # If OpenCV fails → fallback to libcamera
     play(tts_main, switch_to_rasp_p)
     return capture_with_libcamera()
- 
- # ===============================================================
- # PUSH BUTTON FUNCTION
- # ===============================================================
- 
-def wait_for_button():
-    print("Waiting for button press...")
-    button.wait_for_press()
-    print("Button pressed!")
-    return "v"
 
 # ================================================================
 # CLEAR AUDIO DIRECTORY
@@ -363,10 +340,10 @@ def main():
                 # Non-blocking keypress
                 key = None
                 
-                global button_event
-                if button_event:
-                    key = button_event
-                    button_event = None
+            if playback_controls.button_event:
+                key = playback_controls.button_event
+                playback_controls.button_event = None
+
 
             # =====================================================
             # (p) — PAUSE
