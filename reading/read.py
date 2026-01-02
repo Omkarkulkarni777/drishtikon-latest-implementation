@@ -564,6 +564,10 @@ def main():
                             save_state(task_state)
                         play(tts_main, exiting_reading_module_p)
                         return
+                        
+                    elif choice == "k":
+                        with open("/tmp/stop.txt", "w"):
+                            pass
                     else:
                         print("Invalid option.")
                         continue

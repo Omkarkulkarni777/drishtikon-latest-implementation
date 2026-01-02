@@ -32,6 +32,7 @@ def kill_all_processes():
 def linux_stop_listener():
     while True:
         if os.path.exists("/tmp/stop.txt"):
+            os.remove("/tmp/stop.txt")
             play(tts_main, emergency_stop_p)
             kill_all_processes()
             os._exit(0)
