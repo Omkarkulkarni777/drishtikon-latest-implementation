@@ -20,7 +20,7 @@ Device.pin_factory = LGPIOFactory()
 button = Button(17)
 
 
-BUTTON_COOLDOWN = 0.5  # seconds
+BUTTON_COOLDOWN = 5  # seconds
 _last_press_time = 0
 
 # Single event (poll-based)
@@ -68,7 +68,7 @@ def wait_for_button(key="v"):
     return key
 
 # ================================================================
-# CROSS-PLATFORM NON-BLOCKING KEY READ
+# NON-BLOCKING KEY READ (CROSS-PLATFORM)
 # ================================================================
 if os.name == "nt":
     import msvcrt
@@ -77,24 +77,59 @@ if os.name == "nt":
         if msvcrt.kbhit():
             return msvcrt.getwch().lower()
         return None
+
 else:
+    import select
+    import termios
+    import tty
+
     def read_key_nonblocking():
-        try:
-            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                return sys.stdin.read(1).lower()
-        except Exception:
+        # Only works if attached to a real terminal
+        if not sys.stdin.isatty():
             return None
+
+        if select.select([sys.stdin], [], [], 0)[0]:
+            return sys.stdin.read(1).lower()
         return None
 
+
+# ================================================================
+# BLOCKING KEY WAIT (CROSS-PLATFORM, FIXED)
+# ================================================================
 def wait_for_key(valid_keys=None, sleep=0.05):
     """
-    Blocking *logic* loop, non-blocking I/O.
+    Blocking key wait.
+    - Windows: msvcrt
+    - Linux: termios + cbreak (set ONCE per wait)
     """
-    while True:
-        key = read_key_nonblocking()
-        if key and (valid_keys is None or key in valid_keys):
-            return key
-        time.sleep(sleep)
+
+    # ---------- Windows ----------
+    if os.name == "nt":
+        while True:
+            key = read_key_nonblocking()
+            if key and (valid_keys is None or key in valid_keys):
+                return key
+            time.sleep(sleep)
+
+    # ---------- Linux / POSIX ----------
+    if not sys.stdin.isatty():
+        return None  # cannot work in GUI / redirected stdin
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    try:
+        tty.setcbreak(fd)  # IMPORTANT: set once
+
+        while True:
+            if select.select([sys.stdin], [], [], 0)[0]:
+                key = sys.stdin.read(1).lower()
+                if valid_keys is None or key in valid_keys:
+                    return key
+            time.sleep(sleep)
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 # ================================================================
 # AUDIO HELPERS
@@ -117,6 +152,8 @@ def non_blocking_play(
     """
     tts.play(audio_file_name)
     print(cmd_to_stop_audio_file)
+    global button_event
+    button_event = None
 
     while tts.is_playing():
         btn = read_button()

@@ -7,7 +7,6 @@ import time
 from core.stt import listen
 from core.tts_player import tts_main
 from core.prompts import *
-from core.playback_controls import play
 from core.priority_audio import AudioPriority, PriorityAudioManager
 
 # ================================================================
@@ -53,6 +52,12 @@ def start_module(module_name: str):
 
     active_processes.remove(p)
 
+# ================================================================
+# AUDIO HELPERS
+# ================================================================
+def play(tts=tts_main, audio_file_name=goodbye_p):
+    tts.play(audio_file_name)
+    tts.wait()
 
 # ================================================================
 # MAIN LOOP
@@ -92,7 +97,7 @@ def main():
         elif "detect" in cmd or "object" in cmd:
             attempt = 0
             play(tts_main, opening_detection_p)
-            start_module("yolo.detect")
+            start_module("detection.detect")
 
         # -----------------------------
         # NAVIGATION (NEW)

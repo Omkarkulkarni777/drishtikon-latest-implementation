@@ -15,7 +15,7 @@ VALID_COMMANDS = {
     "p": ["resume", "continue", "start", "pee", "pay", "play", "okay", "go", "read"],
     
     # Goal: Quit, Exit, Stop
-    "q": ["quit", "exit", "end", "detect", "stop", "quick", "queue", "done", "cancel", "out"],
+    "q": ["quit", "exit", "excerpt", "end", "detect", "stop", "quick", "queue", "done", "cancel", "out"],
     
     # Goal: Summary, Summarize
     "m": ["summary", "summarize", "summarise", "somebody", 'summer'],
@@ -27,7 +27,7 @@ VALID_COMMANDS = {
     "r": ["search", "surge", "suraj", "rag", "look", "find", "track", "are", "arg", "art", "rock", "wreck"],
     
     # Goal: Yes when asked to continue previous task
-    "y": ["yes"]
+    "y": ["yes", "yep", "yeah", "sure", "great"]
 }
 
 def normalize_command(text):
