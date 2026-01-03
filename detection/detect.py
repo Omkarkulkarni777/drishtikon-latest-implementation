@@ -24,6 +24,17 @@ from core.prompts import (
 
 load_dotenv()
 
+# --------------------------------------------------
+# ROUTED BUTTON EVENT (NO GPIO)
+# --------------------------------------------------
+BUTTON_FILE = "/tmp/detection_button"
+
+def poll_button_event():
+    if os.path.exists(BUTTON_FILE):
+        os.remove(BUTTON_FILE)
+        return "v"
+    return None
+
 # ================================================================
 # GEMINI CONFIG
 # ================================================================
@@ -116,7 +127,11 @@ def main():
         # --------------------------------------------------------
         # Wait for user intent
         # --------------------------------------------------------
-        key = wait_for_button()
+        key = None
+        while key is None:
+            key = poll_button_event()
+            if key is None:
+                key = wait_for_key(valid_keys=["v", "q"], sleep=0.1)
 
         # --------------------------------------------------------
         # Gemini summary
