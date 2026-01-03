@@ -28,11 +28,21 @@ from core.summarize import summarize
 from core.query import answer_query
 from core.prompts import *
 from core.state import *
-from core import playback_controls
-from core.playback_controls import play, non_blocking_play, read_key_nonblocking, wait_for_key, wait_for_button, button_event
+from core.playback_controls import play, non_blocking_play, wait_for_key
 from reading.rag import main_rag, upload_text_to_store, rag_query_voice
 
 load_dotenv()
+
+# --------------------------------------------------
+# BUTTON EVENT BRIDGE (NO GPIO)
+# --------------------------------------------------
+BUTTON_FILE = "/tmp/reading_button"
+
+def poll_button_event():
+    if os.path.exists(BUTTON_FILE):
+        os.remove(BUTTON_FILE)
+        return "v"
+    return None
 
 # ================================================================
 #  GOOGLE CREDENTIALS
@@ -341,10 +351,9 @@ def main():
                 # Non-blocking keypress
                 key = None
                 
-            if playback_controls.button_event:
-                key = playback_controls.button_event
-                playback_controls.button_event = None
-
+            btn = poll_button_event()
+            if btn:
+                key = btn
 
             # =====================================================
             # (p) — PAUSE
