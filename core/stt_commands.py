@@ -15,7 +15,7 @@ VALID_COMMANDS = {
     "p": ["resume", "continue", "start", "pee", "pay", "play", "okay", "go", "read"],
     
     # Goal: Quit, Exit, Stop
-    "q": ["quit", "exit", "excerpt", "end", "detect", "stop", "quick", "queue", "done", "cancel", "out"],
+    "q": ["quit", "exit", "exist", "excerpt", "end", "detect", "stop", "quick", "queue", "done", "cancel", "out"],
     
     # Goal: Summary, Summarize
     "m": ["summary", "summarize", "summarise", "somebody", 'summer'],

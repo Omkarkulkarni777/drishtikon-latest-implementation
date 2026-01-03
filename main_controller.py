@@ -3,6 +3,9 @@ import os
 import subprocess
 import threading
 import time
+import glob
+import signal
+import atexit
 
 from gpiozero import Button, Device
 from gpiozero.pins.lgpio import LGPIOFactory
@@ -13,6 +16,40 @@ from core.prompts import *
 from core.priority_audio import AudioPriority, PriorityAudioManager
 
 # ================================================================
+# TMP CLEANUP (CRASH-SAFE)
+# ================================================================
+def cleanup_tmp_files():
+    paths = []
+
+    # Central event directory
+    paths.extend(glob.glob("/tmp/drishtikon_events/*"))
+
+    # Routed module button files
+    paths.extend(glob.glob("/tmp/*_button"))
+    paths.extend(glob.glob("/tmp/*_response"))
+
+    # Emergency stop file
+    paths.append("/tmp/stop.txt")
+
+    for p in paths:
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass  # never block shutdown
+
+# Cleanup on normal exit
+atexit.register(cleanup_tmp_files)
+
+# Cleanup on signals (Ctrl+C, kill, systemd stop)
+def _signal_handler(signum, frame):
+    cleanup_tmp_files()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+
+# ================================================================
 # GPIO (CENTRALIZED – MAIN CONTROLLER ONLY)
 # ================================================================
 Device.pin_factory = LGPIOFactory()
@@ -21,7 +58,7 @@ EVENT_DIR = "/tmp/drishtikon_events"
 os.makedirs(EVENT_DIR, exist_ok=True)
 
 BUTTON_FILE = os.path.join(EVENT_DIR, "button")
-BUTTON_COOLDOWN = 1.0
+BUTTON_COOLDOWN = 3.0
 _last_button = 0
 
 button = Button(17)
@@ -56,7 +93,7 @@ def kill_all_processes():
         try:
             p.terminate()
             p.kill()
-        except:
+        except Exception:
             pass
     active_processes.clear()
 
@@ -93,10 +130,12 @@ def start_module(module_name: str, tag: str):
 
     while p.poll() is None:
         time.sleep(0.1)
+
     try:
         active_processes.remove(p)
-    except Exception as e:
-        print(f"Exception encountered when trying to remove {p}")
+    except Exception:
+        pass
+
     active_module = None
 
 # ================================================================
@@ -107,14 +146,17 @@ def play(tts=tts_main, audio_file_name=goodbye_p):
     tts.wait()
 
 # ================================================================
-# MAIN LOOP (NEVER EXITS)
+# MAIN LOOP
 # ================================================================
 def main():
+    # Clean up any stale tmp files from previous crashes
+    cleanup_tmp_files()
+
     threading.Thread(target=linux_stop_listener, daemon=True).start()
     threading.Thread(target=event_router, daemon=True).start()
 
     play(tts_main, system_ready_p)
-    
+
     attempt = 0
     while attempt < 2:
         cmd = listen()
@@ -142,7 +184,7 @@ def main():
         # -----------------------------
         # OBJECT DETECTION
         # -----------------------------
-        elif "detect" in cmd or "object" in cmd:
+        elif "detect" in cmd or "object" in cmd or "help" in cmd or "predict" in cmd:
             play(tts_main, opening_detection_p)
             start_module("detection.detect", "detection")
 
@@ -156,7 +198,7 @@ def main():
         # -----------------------------
         # EXIT (SOFT)
         # -----------------------------
-        elif "exit" in cmd or "quit" in cmd or "excerpt" in cmd:
+        elif "exit" in cmd or "quit" in cmd or "excerpt" in cmd or "stop" in cmd:
             play(tts_main, goodbye_p)
             break
 

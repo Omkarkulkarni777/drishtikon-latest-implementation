@@ -152,7 +152,7 @@ def main():
                 play(tts_main, ask_query_intro_p)
 
                 user_query = listen_continuous()
-                if helper_for_exit(user_query) == "q":
+                if helper_for_exit(user_query) == "q" or len(user_query.split()) < 2:
                     play(tts_main, exiting_detection_module_p)
                     break
 
