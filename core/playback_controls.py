@@ -10,35 +10,16 @@ from core.prompts import (
 )
 from core.tts_player import tts_main
 
-# ================================================================
-# ROUTED BUTTON EVENT (IPC ONLY)
-# ================================================================
-MODULE_NAME = os.getenv("DRISHTIKON_MODULE")  # set by main controller
-BUTTON_FILE = f"/tmp/{MODULE_NAME}_button" if MODULE_NAME else None
+# --------------------------------------------------
+# BUTTON EVENT BRIDGE (NO GPIO)
+# --------------------------------------------------
+BUTTON_FILE = "/tmp/reading_button"
 
-
-def read_button():
-    """
-    NON-BLOCKING.
-    Returns 'v' once per routed button event.
-    """
-    if BUTTON_FILE and os.path.exists(BUTTON_FILE):
+def poll_button_event():
+    if os.path.exists(BUTTON_FILE):
         os.remove(BUTTON_FILE)
         return "v"
     return None
-
-
-def wait_for_button(key="v"):
-    """
-    BLOCKING.
-    Use ONLY in idle/modal states.
-    """
-    print("Waiting for button...")
-    while True:
-        btn = read_button()
-        if btn:
-            return key
-        time.sleep(0.05)
 
 # ================================================================
 # NON-BLOCKING KEY READ (CROSS-PLATFORM)
@@ -108,6 +89,7 @@ def non_blocking_play(
     cmd_to_stop_audio_file="Press button to stop",
     stop_audio_file_name=stopping_response_p,
     in_a_loop=False,
+    module_name="reading"
 ):
     """
     GPIO-free reactive playback.
@@ -115,9 +97,12 @@ def non_blocking_play(
     """
     tts.play(audio_file_name)
     print(cmd_to_stop_audio_file)
+    
+    global BUTTON_FILE
+    BUTTON_FILE = f"/tmp/{module_name}_button"
 
     while tts.is_playing():
-        btn = read_button()
+        btn = poll_button_event()
         key = read_key_nonblocking()
 
         if btn == "v" or key == "v":

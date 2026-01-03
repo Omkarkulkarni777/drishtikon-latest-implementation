@@ -14,7 +14,7 @@ from core.stt_commands import helper_for_exit
 from core.utils import absolute_path, ensure_dir, load_credential_path, timeit
 from core.tts import speak
 from core.tts_player import tts_main
-from core.playback_controls import play, non_blocking_play, wait_for_key, wait_for_button
+from core.playback_controls import play, non_blocking_play, wait_for_key
 from core.prompts import (
     select_file_p,
     generating_answer_p,
@@ -130,9 +130,7 @@ def main():
         key = None
         while key is None:
             key = poll_button_event()
-            if key is None:
-                key = wait_for_key(valid_keys=["v", "q"], sleep=0.1)
-
+            time.sleep(0.05)
         # --------------------------------------------------------
         # Gemini summary
         # --------------------------------------------------------
@@ -166,6 +164,7 @@ def main():
                 non_blocking_play(
                     tts_main,
                     audio_path,
+                    module_name="detection",
                     cmd_to_stop_audio_file="Press 's' to stop description",
                 )
 

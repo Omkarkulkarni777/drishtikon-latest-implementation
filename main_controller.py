@@ -93,8 +93,10 @@ def start_module(module_name: str, tag: str):
 
     while p.poll() is None:
         time.sleep(0.1)
-
-    active_processes.remove(p)
+    try:
+        active_processes.remove(p)
+    except Exception as e:
+        print(f"Exception encountered when trying to remove {p}")
     active_module = None
 
 # ================================================================
@@ -112,59 +114,54 @@ def main():
     threading.Thread(target=event_router, daemon=True).start()
 
     play(tts_main, system_ready_p)
+    
+    attempt = 0
+    while attempt < 2:
+        cmd = listen()
+        if not cmd:
+            attempt += 1
+            continue
 
-    while True:
+        cmd = cmd.lower()
         attempt = 0
 
-        while attempt < 2:
-            cmd = listen()
-            if not cmd:
-                attempt += 1
-                continue
+        # -----------------------------
+        # READING
+        # -----------------------------
+        if "read" in cmd:
+            play(tts_main, opening_reading_p)
+            start_module("reading.read", "reading")
 
-            cmd = cmd.lower()
-            attempt = 0
+        # -----------------------------
+        # RAG SEARCH
+        # -----------------------------
+        elif "search" in cmd or "find" in cmd:
+            play(tts_main, opening_search_p)
+            start_module("reading.rag", "rag")
 
-            # -----------------------------
-            # READING
-            # -----------------------------
-            if "read" in cmd:
-                play(tts_main, opening_reading_p)
-                start_module("reading.read", "reading")
+        # -----------------------------
+        # OBJECT DETECTION
+        # -----------------------------
+        elif "detect" in cmd or "object" in cmd:
+            play(tts_main, opening_detection_p)
+            start_module("detection.detect", "detection")
 
-            # -----------------------------
-            # RAG SEARCH
-            # -----------------------------
-            elif "search" in cmd or "find" in cmd:
-                play(tts_main, opening_search_p)
-                start_module("reading.rag", "rag")
+        # -----------------------------
+        # NAVIGATION
+        # -----------------------------
+        elif "navigate" in cmd:
+            play(tts_main, navigation_p)
+            start_module("navigation.navigate", "navigation")
 
-            # -----------------------------
-            # OBJECT DETECTION
-            # -----------------------------
-            elif "detect" in cmd or "object" in cmd:
-                play(tts_main, opening_detection_p)
-                start_module("detection.detect", "detection")
+        # -----------------------------
+        # EXIT (SOFT)
+        # -----------------------------
+        elif "exit" in cmd or "quit" in cmd or "excerpt" in cmd:
+            play(tts_main, goodbye_p)
+            break
 
-            # -----------------------------
-            # NAVIGATION
-            # -----------------------------
-            elif "navigate" in cmd:
-                play(tts_main, navigation_p)
-                start_module("navigation.navigate", "navigation")
-
-            # -----------------------------
-            # EXIT (SOFT)
-            # -----------------------------
-            elif "exit" in cmd or "quit" in cmd:
-                play(tts_main, goodbye_p)
-                break
-
-            else:
-                play(tts_main, did_not_understand_p)
-
-        # Silence timeout → idle reset
-        play(tts_main, goodbye_p)
+        else:
+            play(tts_main, did_not_understand_p)
 
 if __name__ == "__main__":
     main()
