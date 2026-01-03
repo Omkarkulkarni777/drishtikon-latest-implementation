@@ -1,8 +1,6 @@
 import time
 import os
 import sys
-from gpiozero import Button, Device
-from gpiozero.pins.lgpio import LGPIOFactory
 
 from core.prompts import (
     goodbye_p,
@@ -13,59 +11,34 @@ from core.prompts import (
 from core.tts_player import tts_main
 
 # ================================================================
-# GPIO SETUP
+# ROUTED BUTTON EVENT (IPC ONLY)
 # ================================================================
-Device.pin_factory = LGPIOFactory()
-
-button = Button(17)
-
-
-BUTTON_COOLDOWN = 5  # seconds
-_last_press_time = 0
-
-# Single event (poll-based)
-button_event = None
+MODULE_NAME = os.getenv("DRISHTIKON_MODULE")  # set by main controller
+BUTTON_FILE = f"/tmp/{MODULE_NAME}_button" if MODULE_NAME else None
 
 
-def _on_button_pressed():
-    global button_event, _last_press_time
-    now = time.monotonic()
-
-    if now - _last_press_time < BUTTON_COOLDOWN:
-        return  # ignore bounce / rapid re-press
-
-    _last_press_time = now
-    button_event = "v"
-    print("[GPIO] Button accepted → v")
-
-
-button.when_pressed = _on_button_pressed
-
-# ================================================================
-# BUTTON INPUT API
-# ================================================================
 def read_button():
     """
     NON-BLOCKING.
-    Returns button key once, then clears it.
+    Returns 'v' once per routed button event.
     """
-    global button_event
-    if button_event:
-        key = button_event
-        button_event = None
-        return key
+    if BUTTON_FILE and os.path.exists(BUTTON_FILE):
+        os.remove(BUTTON_FILE)
+        return "v"
     return None
 
 
 def wait_for_button(key="v"):
     """
     BLOCKING.
-    Use ONLY in idle / modal states.
+    Use ONLY in idle/modal states.
     """
-    print("Waiting for button press...")
-    button.wait_for_press()
-    print("Button pressed!")
-    return key
+    print("Waiting for button...")
+    while True:
+        btn = read_button()
+        if btn:
+            return key
+        time.sleep(0.05)
 
 # ================================================================
 # NON-BLOCKING KEY READ (CROSS-PLATFORM)
@@ -84,7 +57,6 @@ else:
     import tty
 
     def read_key_nonblocking():
-        # Only works if attached to a real terminal
         if not sys.stdin.isatty():
             return None
 
@@ -92,18 +64,10 @@ else:
             return sys.stdin.read(1).lower()
         return None
 
-
 # ================================================================
-# BLOCKING KEY WAIT (CROSS-PLATFORM, FIXED)
+# BLOCKING KEY WAIT
 # ================================================================
 def wait_for_key(valid_keys=None, sleep=0.05):
-    """
-    Blocking key wait.
-    - Windows: msvcrt
-    - Linux: termios + cbreak (set ONCE per wait)
-    """
-
-    # ---------- Windows ----------
     if os.name == "nt":
         while True:
             key = read_key_nonblocking()
@@ -111,25 +75,24 @@ def wait_for_key(valid_keys=None, sleep=0.05):
                 return key
             time.sleep(sleep)
 
-    # ---------- Linux / POSIX ----------
     if not sys.stdin.isatty():
-        return None  # cannot work in GUI / redirected stdin
+        return None
+
+    import termios, tty, select
 
     fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    old = termios.tcgetattr(fd)
 
     try:
-        tty.setcbreak(fd)  # IMPORTANT: set once
-
+        tty.setcbreak(fd)
         while True:
             if select.select([sys.stdin], [], [], 0)[0]:
                 key = sys.stdin.read(1).lower()
                 if valid_keys is None or key in valid_keys:
                     return key
             time.sleep(sleep)
-
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 # ================================================================
 # AUDIO HELPERS
@@ -147,17 +110,17 @@ def non_blocking_play(
     in_a_loop=False,
 ):
     """
-    GPIO-only reactive playback.
-    No keyboard. No blocking GPIO.
+    GPIO-free reactive playback.
+    Stops on routed button OR keyboard 'v'.
     """
     tts.play(audio_file_name)
     print(cmd_to_stop_audio_file)
-    global button_event
-    button_event = None
 
     while tts.is_playing():
         btn = read_button()
-        if btn == "v":
+        key = read_key_nonblocking()
+
+        if btn == "v" or key == "v":
             if in_a_loop:
                 play(tts_main, pause_beep)
                 return True
