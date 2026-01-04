@@ -15,6 +15,19 @@ from core.tts_player import tts_main
 from core.prompts import *
 from core.priority_audio import AudioPriority, PriorityAudioManager
 
+
+# ================================================================
+# WAIT FOR A BUTTON CLICK TO START MAIN_CONTROLLER
+# ================================================================
+def wait_for_initial_button():
+    print("[SYSTEM] Waiting for first button press to start...")
+    while True:
+        if os.path.exists(BUTTON_FILE):
+            os.remove(BUTTON_FILE)   # consume the event
+            print("[SYSTEM] Initial button detected → starting main")
+            return
+        time.sleep(0.05)
+
 # ================================================================
 # TMP CLEANUP (CRASH-SAFE)
 # ================================================================
@@ -170,7 +183,7 @@ def main():
         # -----------------------------
         # READING
         # -----------------------------
-        if "read" in cmd:
+        if "read" in cmd or "weird" in cmd or "book" in cmd:
             play(tts_main, opening_reading_p)
             start_module("reading.read", "reading")
 
@@ -199,11 +212,14 @@ def main():
         # EXIT (SOFT)
         # -----------------------------
         elif "exit" in cmd or "quit" in cmd or "excerpt" in cmd or "stop" in cmd:
-            play(tts_main, goodbye_p)
             break
 
         else:
             play(tts_main, did_not_understand_p)
+        
+    play(tts_main, goodbye_p)
 
 if __name__ == "__main__":
+    cleanup_tmp_files()
+    wait_for_initial_button()
     main()
