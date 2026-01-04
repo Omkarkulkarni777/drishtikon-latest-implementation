@@ -23,6 +23,8 @@ def wait_for_initial_button():
     print("[SYSTEM] Waiting for first button press to start...")
     while True:
         if os.path.exists(BUTTON_FILE):
+            global state
+            state = True
             os.remove(BUTTON_FILE)   # consume the event
             print("[SYSTEM] Initial button detected → starting main")
             return
@@ -73,6 +75,7 @@ os.makedirs(EVENT_DIR, exist_ok=True)
 BUTTON_FILE = os.path.join(EVENT_DIR, "button")
 BUTTON_COOLDOWN = 3.0
 _last_button = 0
+state = True
 
 button = Button(17)
 
@@ -124,12 +127,14 @@ def linux_stop_listener():
 def event_router():
     global active_module
     while True:
-        if os.path.exists(BUTTON_FILE):
-            os.remove(BUTTON_FILE)
-            if active_module:
-                open(f"/tmp/{active_module}_button", "w").close()
-                print(f"[ROUTER] button → {active_module}")
-        time.sleep(0.05)
+        global state
+        if state:
+            if os.path.exists(BUTTON_FILE):
+                os.remove(BUTTON_FILE)
+                if active_module:
+                    open(f"/tmp/{active_module}_button", "w").close()
+                    print(f"[ROUTER] button → {active_module}")
+            time.sleep(0.05)
 
 # ================================================================
 # SUBPROCESS LAUNCHER
@@ -212,6 +217,8 @@ def main():
         # EXIT (SOFT)
         # -----------------------------
         elif "exit" in cmd or "quit" in cmd or "excerpt" in cmd or "stop" in cmd:
+            global state
+            state = False
             break
 
         else:
@@ -221,5 +228,10 @@ def main():
 
 if __name__ == "__main__":
     cleanup_tmp_files()
-    wait_for_initial_button()
-    main()
+
+    while True:
+        wait_for_initial_button()
+        main()
+        cleanup_tmp_files()
+        print("[SYSTEM] Returned to idle state")
+        time.sleep(0.05)
