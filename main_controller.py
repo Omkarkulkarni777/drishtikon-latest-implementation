@@ -28,7 +28,7 @@ BUTTON_COOLDOWN = 3.0
 _last_button = 0
 state = True
 
-button = Button(17)
+button = Button(17, pull_up=True)
 
 # ================================================================
 # WAIT FOR A BUTTON CLICK TO START MAIN_CONTROLLER
@@ -186,8 +186,11 @@ def main():
     play(tts_main, system_ready_p)
 
     attempt = 0
-    while attempt < 2:
+    while attempt < 2 and state:
         cmd = listen()
+        if not state:
+            break
+
         if not cmd:
             attempt += 1
             continue
@@ -232,6 +235,9 @@ def main():
 
         else:
             play(tts_main, did_not_understand_p)
+
+        if not state:
+            break
     
     state = False
     play(tts_main, goodbye_p)
