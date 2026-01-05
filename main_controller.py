@@ -20,13 +20,13 @@ from core.priority_audio import AudioPriority, PriorityAudioManager
 # WAIT FOR A BUTTON CLICK TO START MAIN_CONTROLLER
 # ================================================================
 def wait_for_initial_button():
-    print("[SYSTEM] Waiting for first button press to start...")
+    # print("[SYSTEM] Waiting for first button press to start...")
     while True:
         if os.path.exists(BUTTON_FILE):
             global state
             state = True
             os.remove(BUTTON_FILE)   # consume the event
-            print("[SYSTEM] Initial button detected → starting main")
+            # print("[SYSTEM] Initial button detected → starting main")
             return
         time.sleep(0.05)
 
@@ -50,7 +50,7 @@ def cleanup_tmp_files():
         try:
             if os.path.exists(p):
                 os.remove(p)
-        except Exception:
+        except Exception as e:
             pass  # never block shutdown
 
 # Cleanup on normal exit
@@ -89,7 +89,7 @@ def on_button():
         return
     _last_button = now
     emit("button")
-    print("[GPIO] Button pressed")
+    # print("[GPIO] Button pressed")
 
 button.when_pressed = on_button
 
@@ -129,11 +129,15 @@ def event_router():
     while True:
         global state
         if state:
-            if os.path.exists(BUTTON_FILE):
-                os.remove(BUTTON_FILE)
-                if active_module:
-                    open(f"/tmp/{active_module}_button", "w").close()
-                    print(f"[ROUTER] button → {active_module}")
+            try:
+                if os.path.exists(BUTTON_FILE):
+                    os.remove(BUTTON_FILE)
+                    if active_module:
+                        open(f"/tmp/{active_module}_button", "w").close()
+                        # print(f"[ROUTER] button → {active_module}")
+            except Exception:
+                pass
+                
             time.sleep(0.05)
 
 # ================================================================
@@ -167,6 +171,7 @@ def play(tts=tts_main, audio_file_name=goodbye_p):
 # MAIN LOOP
 # ================================================================
 def main():
+    global state
     # Clean up any stale tmp files from previous crashes
     cleanup_tmp_files()
 
@@ -217,14 +222,15 @@ def main():
         # EXIT (SOFT)
         # -----------------------------
         elif "exit" in cmd or "quit" in cmd or "excerpt" in cmd or "stop" in cmd:
-            global state
             state = False
             break
 
         else:
             play(tts_main, did_not_understand_p)
-        
+    
+    state = False
     play(tts_main, goodbye_p)
+    time.sleep(0.1)
 
 if __name__ == "__main__":
     cleanup_tmp_files()
@@ -233,5 +239,5 @@ if __name__ == "__main__":
         wait_for_initial_button()
         main()
         cleanup_tmp_files()
-        print("[SYSTEM] Returned to idle state")
+        # print("[SYSTEM] Returned to idle state")
         time.sleep(0.05)

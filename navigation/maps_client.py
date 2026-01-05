@@ -6,20 +6,59 @@ import googlemaps
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
 
+# Allowed nearby place categories (speech-friendly)
+ALLOWED_NEARBY_KEYWORDS = [
+    "bus stop",
+    "bus stand",
+    "hospital",
+    "clinic",
+    "pharmacy",
+    "medical store",
+    "police station",
+    "railway station",
+    "metro station",
+    "bank",
+    "atm",
+    "school",
+    "university",
+    "restaurant",
+    "cafe",
+    "supermarket",
+    "grocery store",
+    "mall",
+    "post office",
+    "library",
+    "park",
+    "gas station",
+    "fuel station"
+]
+
+
+def is_valid_nearby_query(query: str) -> bool:
+    query = query.lower()
+    return any(keyword in query for keyword in ALLOWED_NEARBY_KEYWORDS)
+
 
 def find_nearest_place(source, query):
     """
     Uses Places API to find nearest matching place.
+    (Parameters unchanged as requested)
     """
+
+    # Validate nearby place category
+    if not is_valid_nearby_query(query):
+        return "INVALID_CATEGORY"
+
     places = gmaps.places(
         query=source + " " + query,
         location=source,
         radius=2000
     )
 
-    if not places["results"]:
+    if not places.get("results"):
         return None
 
+    # Google already sorts by relevance
     place = places["results"][0]
     location = place["geometry"]["location"]
 
@@ -31,11 +70,15 @@ def find_nearest_place(source, query):
 
 def get_route(origin_coords, nearby_query):
     """
-    1. Find nearest place
+    1. Find nearest valid nearby place
     2. Fetch walking route to it
     """
     try:
         nearest = find_nearest_place(origin_coords, nearby_query)
+
+        if nearest == "INVALID_CATEGORY":
+            return "INVALID_CATEGORY"
+
         if not nearest:
             return None
 

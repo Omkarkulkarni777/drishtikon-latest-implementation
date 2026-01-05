@@ -100,28 +100,13 @@ def gemini_scene_summary(image_path: str, user_query: str = None) -> str:
 @timeit("[DUMMY DETECTION MAIN]")
 def main():
     ensure_dir(absolute_path("results", "gemini_cache"))
-
-    play(tts_main, select_file_p)
-
-    import sys
-    print("isatty:", sys.stdin.isatty())
-
+    
     # ------------------------------------------------------------
     # Image selection
     # ------------------------------------------------------------
-    img_chosen = True
+    cam = cv2.VideoCapture(0)
 
-    root = tk.Tk()
-    root.withdraw()
-    img_path = filedialog.askopenfilename()
-    root.destroy()
-
-    cam = None
-    if not img_path:
-        img_chosen = False
-        cam = cv2.VideoCapture(0)
-
-    print("\n[v] Describe scene | [v (and say 'exit')] Quit\n")
+    print("\n[v] Ask query | [v (and say 'exit')] Quit\n")
 
     while True:
         # --------------------------------------------------------
@@ -146,9 +131,7 @@ def main():
                 img_path = absolute_path("results", "gemini_cache", "live.jpg")
 
             try:
-                if not img_chosen:
-                    cv2.imwrite(img_path, frame)
-
+                cv2.imwrite(img_path, frame)
                 play(tts_main, ask_query_intro_p)
 
                 user_query = listen_continuous()

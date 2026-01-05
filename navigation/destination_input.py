@@ -11,6 +11,7 @@ from core.prompts import (
     navigation_dest_err_p
 )
 
+
 def get_source_and_nearby_place():
     # Ask for source
     play(tts_main, navigation_src_p)
@@ -20,7 +21,7 @@ def get_source_and_nearby_place():
         play(tts_main, navigation_src_err_p)
         return None, None
 
-    # Ask what nearby place user wants
+    # Ask nearby place
     play(tts_main, navigation_dest_p)
     nearby_request = listen_continuous()
 
@@ -29,8 +30,8 @@ def get_source_and_nearby_place():
         return source, None
 
     confirm_audio = speak(
-        f"You are at {source}. Looking for {nearby_request}."
+        f"You are at {source}. Searching for nearby {nearby_request}."
     )
     play(tts_main, confirm_audio)
-    
+
     return source, nearby_request
