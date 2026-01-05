@@ -15,6 +15,20 @@ from core.tts_player import tts_main
 from core.prompts import *
 from core.priority_audio import AudioPriority, PriorityAudioManager
 
+# ================================================================
+# GPIO (CENTRALIZED – MAIN CONTROLLER ONLY)
+# ================================================================
+Device.pin_factory = LGPIOFactory()
+
+EVENT_DIR = "/tmp/drishtikon_events"
+os.makedirs(EVENT_DIR, exist_ok=True)
+
+BUTTON_FILE = os.path.join(EVENT_DIR, "button")
+BUTTON_COOLDOWN = 3.0
+_last_button = 0
+state = True
+
+button = Button(17)
 
 # ================================================================
 # WAIT FOR A BUTTON CLICK TO START MAIN_CONTROLLER
@@ -64,20 +78,9 @@ def _signal_handler(signum, frame):
 signal.signal(signal.SIGINT, _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)
 
-# ================================================================
-# GPIO (CENTRALIZED – MAIN CONTROLLER ONLY)
-# ================================================================
-Device.pin_factory = LGPIOFactory()
-
-EVENT_DIR = "/tmp/drishtikon_events"
-os.makedirs(EVENT_DIR, exist_ok=True)
-
-BUTTON_FILE = os.path.join(EVENT_DIR, "button")
-BUTTON_COOLDOWN = 3.0
-_last_button = 0
-state = True
-
-button = Button(17)
+# ===========================================
+# EMIT EVENT (CREATE FILE)
+# ===========================================
 
 def emit(event):
     open(os.path.join(EVENT_DIR, event), "w").close()
@@ -114,11 +117,13 @@ def kill_all_processes():
     active_processes.clear()
 
 def linux_stop_listener():
+    global state
     while True:
         if os.path.exists("/tmp/stop.txt"):
             os.remove("/tmp/stop.txt")
             play(tts_main, emergency_stop_p)
             kill_all_processes()
+            state = False
         time.sleep(0.5)
 
 # ================================================================

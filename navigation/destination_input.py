@@ -11,11 +11,14 @@ from core.prompts import (
     navigation_dest_err_p
 )
 
+from navigation.maps_client import is_valid_nearby_query
+
 
 def get_source_and_nearby_place():
     # Ask for source
     play(tts_main, navigation_src_p)
     source = listen_continuous()
+    # source = "Shree Sadguru Krupa Apartment, Pimpri Chinchwad, Keshavnagar, Vivek Vasahat Road"
 
     if not source:
         play(tts_main, navigation_src_err_p)
@@ -24,14 +27,15 @@ def get_source_and_nearby_place():
     # Ask nearby place
     play(tts_main, navigation_dest_p)
     nearby_request = listen_continuous()
+    # nearby_request = "Shree Sadguru Krupa Apartment Hospital"
 
     if not nearby_request:
         play(tts_main, navigation_dest_err_p)
         return source, None
 
     confirm_audio = speak(
-        f"You are at {source}. Searching for nearby {nearby_request}."
+        f"You are at {source}. Searching for nearby {is_valid_nearby_query(nearby_request)}."
     )
     play(tts_main, confirm_audio)
 
-    return source, nearby_request
+    return source, is_valid_nearby_query(nearby_request)

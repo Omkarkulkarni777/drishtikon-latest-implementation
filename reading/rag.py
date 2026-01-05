@@ -205,7 +205,8 @@ def main_rag(from_main_controller=True):
                 answer_audio,
                 "Press button to stop response",
                 stopping_response_p,
-                in_a_loop=True
+                in_a_loop=True,
+                module_name="rag"
             )
 
             if wants_to_break_loop:

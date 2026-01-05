@@ -33,10 +33,13 @@ ALLOWED_NEARBY_KEYWORDS = [
     "fuel station"
 ]
 
-
+# FILTER USER QUERY
 def is_valid_nearby_query(query: str) -> bool:
     query = query.lower()
-    return any(keyword in query for keyword in ALLOWED_NEARBY_KEYWORDS)
+    for kw in query.split():
+        if kw in ALLOWED_NEARBY_KEYWORDS:
+            return kw
+    return False
 
 
 def find_nearest_place(source, query):
@@ -48,17 +51,21 @@ def find_nearest_place(source, query):
     # Validate nearby place category
     if not is_valid_nearby_query(query):
         return "INVALID_CATEGORY"
-
+        
+    print(f"""\n {is_valid_nearby_query(query)} + " near " + {source} \n""")
     places = gmaps.places(
-        query=source + " " + query,
-        location=source,
-        radius=2000
+        query=is_valid_nearby_query(query) + " near " + source
     )
 
     if not places.get("results"):
         return None
 
     # Google already sorts by relevance
+    for place in places["results"]:
+        print(place)
+        break
+        print(place.get("distance", None))
+    print("\n\n Above is the value of places['results'] \n\n")
     place = places["results"][0]
     location = place["geometry"]["location"]
 
