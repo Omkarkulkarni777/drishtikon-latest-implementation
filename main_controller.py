@@ -29,6 +29,16 @@ _last_button = 0
 state = True
 
 button = Button(17, pull_up=True)
+button_emergency = Button(23, pull_up=True)
+
+# ================================================================
+# EMERGENCY STOP BUTTON
+# ================================================================
+def emergency_stop():
+    global state
+    state = False
+    with open("/tmp/stop.txt", "w"):
+        pass
 
 # ================================================================
 # WAIT FOR A BUTTON CLICK TO START MAIN_CONTROLLER
@@ -95,6 +105,7 @@ def on_button():
     # print("[GPIO] Button pressed")
 
 button.when_pressed = on_button
+button_emergency.when_pressed = emergency_stop
 
 # ================================================================
 # PROCESS TRACKING
@@ -121,8 +132,9 @@ def linux_stop_listener():
     while True:
         if os.path.exists("/tmp/stop.txt"):
             os.remove("/tmp/stop.txt")
-            play(tts_main, emergency_stop_p)
             kill_all_processes()
+            time.sleep(1)
+            play(tts_main, emergency_stop_p)
             state = False
         time.sleep(0.5)
 

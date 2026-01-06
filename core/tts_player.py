@@ -57,7 +57,7 @@ class TTSPlayer:
                     blocksize=1024,
                 )
                 stream.start()
-                print("[TTSPlayer] Streaming started...")
+                # print("[TTSPlayer] Streaming started...")
                 break
             except Exception as e:
                 print(f"[TTSPlayer] Stream open attempt {attempt + 1} failed: {e}")
@@ -89,7 +89,7 @@ class TTSPlayer:
                     pass
             self._stop_flag = False
             self._thread = None
-            print("[TTSPlayer] Streaming finished.")
+            # print("[TTSPlayer] Streaming finished.")
 
     # ------------------------------------------------------------
     # Public API: play
@@ -139,7 +139,7 @@ class TTSPlayer:
         """
         Blocking main thread
         """
-        while self.is_playing():
+        while self.is_playing() and not os.path.exists("/tmp/stop.txt"):
             time.sleep(0.05)
 
 # ================================================================
