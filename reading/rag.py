@@ -191,29 +191,36 @@ def main_rag(from_main_controller=True):
         print("\n========RAG ANSWER=======\n")
         print(answer)
 
-        sentences = split_into_sentences_rag(answer)
-
         if not answer or not answer.strip() or answer.startswith("RAG Query Error"):
             play(tts_main, exiting_search_module_p)
             break
-
-        # Speak the answer
-        for sentence in sentences:
-            answer_audio = speak(sentence)
-            wants_to_break_loop = non_blocking_play(
+            
+        if not from_main_controller:
+           non_blocking_play(
                 tts_main,
-                answer_audio,
+                speak(answer),
                 "Press button to stop response",
-                stopping_response_p,
-                in_a_loop=True,
-                module_name="rag"
+                stopping_response_p
             )
-
-            if wants_to_break_loop:
-                if not from_main_controller:
-                    return answer
-                else:
-                    break
+        else:
+            sentences = split_into_sentences_rag(answer)
+            # Speak the answer
+            for sentence in sentences:
+                answer_audio = speak(sentence)
+                wants_to_break_loop = non_blocking_play(
+                    tts_main,
+                    answer_audio,
+                    "Press button to stop response",
+                    stopping_response_p,
+                    in_a_loop=True,
+                    module_name="rag"
+                )
+    
+                if wants_to_break_loop:
+                    if not from_main_controller:
+                        return answer
+                    else:
+                        break
 
         if not from_main_controller:
             return answer
