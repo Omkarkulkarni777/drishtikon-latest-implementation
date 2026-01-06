@@ -16,6 +16,7 @@ from core.config import init_tts
 from core.constants import AUDIO_DIR, PROMPT_CACHE_DIR
 from core.utils import absolute_path, ensure_dir, load_credential_path
 from core.logger import log
+from core.tts_player import tts_main
 
 # ================================================================
 # DIRECTORIES
@@ -40,6 +41,8 @@ def speak_cached(text: str, filename: str, is_detection: bool=False):
     Generate TTS audio for a prompt ONCE, store as WAV, and reuse thereafter.
     Ensures Pi-safe audio playback with no MP3 decoding.
     """
+    time.sleep(0.01)
+        
     cached_wav = os.path.join(PROMPT_CACHE_DIR, filename)
 
     # Already cached? use it
@@ -47,7 +50,7 @@ def speak_cached(text: str, filename: str, is_detection: bool=False):
         return cached_wav
 
     # Generate speech
-    generated_path = speak(text, is_detection)
+    generated_path = speak("--- " + text, is_detection)
 
     if not generated_path or not os.path.exists(generated_path):
         print("[speak_cached] ERROR: speak() returned no audio.")

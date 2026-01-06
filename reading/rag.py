@@ -173,7 +173,7 @@ def main_rag(from_main_controller=True):
 
         # Listen for user's voice question
         question = listen_continuous()
-        if question is None or not question.strip() or helper_for_exit(question) == "q":
+        if question is None or not question.strip() or helper_for_exit(question) == "q" or len(question.split()) < 2:
             # No question → back to voice mode
             play(tts_main, exiting_search_module_p)
             break

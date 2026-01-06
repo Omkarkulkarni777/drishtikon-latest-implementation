@@ -1,10 +1,10 @@
-import os
+# stt.py — Raspberry Pi SAFE Speech-to-Text
+# Fully rewritten: no RMS hacks, no hanging streams, no timeouts
+
 import queue
 import threading
 import time
-import numpy as np
 import sounddevice as sd
-import soundfile as sf
 from google.cloud import speech
 
 from core.config import init_stt
@@ -12,183 +12,214 @@ from core.constants import CHANNELS, SAMPLE_RATE
 from core.utils import load_credential_path
 from core.logger import log
 
-LANGUAGE_CODE = "en-US"
-LANGUAGE_CODE_IN = "en-IN"
-SILENCE_THRESHOLD = 3.0
-SILENCE_RMS_THRESHOLD = 500
-TARGET_RMS = 2000
-MIN_RMS = 100
-BOOST_THRESHOLD = 500
+# ================================================================
+#  CONFIG
+# ================================================================
+LANGUAGE_CODE = "en-IN"
+FALLBACK_TEXT = ""
+MAX_LISTEN_SECONDS = 6  # hard wall-clock timeout
 
-class STTManager:
-    def __init__(self):
-        self.cred_path = load_credential_path("core", "stt-key.json")
-        self.client = init_stt(self.cred_path)
-        self._audio_queue = queue.Queue()
-        self._stop_event = threading.Event()
-        self._last_speech_time = time.time()
+# ================================================================
+#  GOOGLE CREDENTIALS
+# ================================================================
+CRED_PATH = load_credential_path("core", "stt-key.json")
+speech_client = init_stt(CRED_PATH)
 
-    def record_audio(self, duration=5, device=None):
-        log("STT", "-", f"Recording {duration}s...")
-        try:
-            audio = sd.rec(
-                int(duration * SAMPLE_RATE),
-                samplerate=SAMPLE_RATE,
-                channels=CHANNELS,
-                dtype="int16",
-                device=device
-            )
-            sd.wait()
-            
-            rms = np.sqrt(np.mean(audio.astype(np.float32) ** 2))
-            log("STT", "-", f"Recording complete. RMS: {rms:.0f}")
-            
-            if rms < MIN_RMS:
-                log("STT", "-", "WARNING: Audio level very low")
-            elif rms < BOOST_THRESHOLD:
-                gain = TARGET_RMS / max(rms, 1)
-                audio = np.clip(audio.astype(np.float32) * gain, -32768, 32767).astype(np.int16)
-                log("STT", "-", f"Audio boosted by {gain:.1f}x")
+# ================================================================
+#  BLOCKING (NON-STREAMING) STT
+# ================================================================
+def record_audio(duration=5):
+    """Record raw PCM audio using ALSA (sounddevice)."""
 
-            return audio.tobytes()
-        except Exception as e:
-            log("STT", "-", f"Microphone error: {e}")
-            return None
+    print(f"[STT] Recording {duration}s...")
 
-    def speech_to_text(self, audio_bytes):
-        if not self.client:
-            log("STT", "-", "Client not initialized")
-            return None
-
-        try:
-            debug_path = "/tmp/stt_debug.wav"
-            audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
-            sf.write(debug_path, audio_array, SAMPLE_RATE)
-        except Exception as e:
-            log("STT", "-", f"Debug save failed: {e}")
-
-        audio = speech.RecognitionAudio(content=audio_bytes)
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=SAMPLE_RATE,
-            language_code=LANGUAGE_CODE,
-            enable_automatic_punctuation=True,
-            audio_channel_count=CHANNELS,
-            model="command_and_search"
+    try:
+        audio = sd.rec(
+            int(duration * SAMPLE_RATE),
+            samplerate=SAMPLE_RATE,
+            channels=CHANNELS,
+            dtype="int16",
         )
+        sd.wait()
+    except Exception as e:
+        log("STT", "-", f"Microphone error: {e}")
+        print(f"[STT] Microphone error: {e}")
+        return None
 
-        try:
-            response = self.client.recognize(config=config, audio=audio)
-            if not response.results:
-                return None
-            return response.results[0].alternatives[0].transcript
-        except Exception as e:
-            log("STT", "-", f"Google STT error: {e}")
-            return None
+    return audio.tobytes()
 
-    def listen(self, duration=5):
-        t0 = time.time()
-        audio_bytes = self.record_audio(duration)
-        if not audio_bytes:
-            return None
-        
-        text = self.speech_to_text(audio_bytes)
-        t1 = time.time()
-        log("STT", "-", f"Heard: '{text}'" if text else "No speech", t1 - t0)
-        return text
 
-    def _audio_callback(self, indata, frames, time_info, status):
+def speech_to_text(audio_bytes):
+    """Send audio bytes to Google STT (blocking)."""
+
+    if not speech_client or not audio_bytes:
+        return None
+
+    audio = speech.RecognitionAudio(content=audio_bytes)
+
+    config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=SAMPLE_RATE,
+        language_code=LANGUAGE_CODE,
+        enable_automatic_punctuation=True,
+    )
+
+    try:
+        response = speech_client.recognize(config=config, audio=audio)
+    except Exception as e:
+        log("STT", "-", f"Google STT error: {e}")
+        print(f"[STT] Google STT error: {e}")
+        return None
+
+    if not response.results:
+        return None
+
+    return response.results[0].alternatives[0].transcript
+
+
+def listen(duration=5):
+    """
+    Simple blocking listen.
+    Guaranteed to return text or FALLBACK_TEXT.
+    """
+
+    t0 = time.time()
+
+    audio = record_audio(duration)
+    text = speech_to_text(audio)
+
+    elapsed = round(time.time() - t0, 2)
+
+    if not text:
+        log("STT", "-", "No speech detected (fallback)", elapsed)
+        print("[STT] No speech detected.")
+        return FALLBACK_TEXT
+
+    log("STT", "-", f"Heard '{text}'", elapsed)
+    print("[STT] Heard:", text)
+    return text
+
+
+# ================================================================
+#  STREAMING STT (PRIMARY PATH)
+# ================================================================
+def listen_continuous():
+    """
+    Streaming STT with:
+    - Google-managed end-of-speech
+    - Hard timeout
+    - Safe fallback
+    """
+
+    if not speech_client:
+        return FALLBACK_TEXT
+
+    audio_queue = queue.Queue()
+    stop_event = threading.Event()
+    transcript_parts = []
+
+    # ------------------------------------------------------------
+    # Audio callback
+    # ------------------------------------------------------------
+    def audio_callback(indata, frames, time_info, status):
         if status:
-            log("STT", "-", f"Audio status: {status}")
-        
-        self._audio_queue.put(bytes(indata))
-        
-        rms = np.sqrt(np.mean(indata.astype(np.float32) ** 2))
-        if rms > SILENCE_RMS_THRESHOLD:
-            self._last_speech_time = time.time()
+            print(status)
+        audio_queue.put(bytes(indata))
 
-    def _request_generator(self):
-        while True:
-            if self._stop_event.is_set():
-                return
+    # ------------------------------------------------------------
+    # Generator feeding Google
+    # ------------------------------------------------------------
+    def request_generator():
+        while not stop_event.is_set():
             try:
-                chunk = self._audio_queue.get(timeout=0.1)
+                chunk = audio_queue.get(timeout=0.1)
                 yield speech.StreamingRecognizeRequest(audio_content=chunk)
             except queue.Empty:
                 continue
 
-    def listen_continuous(self):
-        if not self.client:
-            log("STT", "-", "Client not initialized")
-            return ""
+    # ------------------------------------------------------------
+    # Google response loop
+    # ------------------------------------------------------------
+    def response_loop(responses):
+        try:
+            for response in responses:
+                if stop_event.is_set():
+                    break
 
-        self._stop_event.clear()
-        self._last_speech_time = time.time()
-        full_transcript = []
+                if not response.results:
+                    continue
 
-        def response_loop(responses):
-            try:
-                for response in responses:
-                    if self._stop_event.is_set():
-                        break
-                    if not response.results:
-                        continue
-                    
-                    result = response.results[0]
-                    transcript = result.alternatives[0].transcript
-                    
-                    if result.is_final:
-                        log("STT", "-", f"Confirmed: {transcript}")
-                        full_transcript.append(transcript)
-            except Exception as e:
-                if not self._stop_event.is_set():
-                    log("STT", "-", f"Stream error: {e}")
+                result = response.results[0]
+                transcript = result.alternatives[0].transcript
 
-        with sd.InputStream(
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype="int16",
-            callback=self._audio_callback,
-        ):
-            log("STT", "-", "Listening continuous...")
-            
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=SAMPLE_RATE,
-                language_code=LANGUAGE_CODE_IN,
-                enable_automatic_punctuation=True,
-                audio_channel_count=CHANNELS,
-                model="command_and_search"
-            )
-            
-            streaming_config = speech.StreamingRecognitionConfig(
-                config=config,
-                interim_results=True,
-                single_utterance=True,
-            )
+                if result.is_final:
+                    print(f"\n[STT] Confirmed: {transcript}")
+                    transcript_parts.append(transcript)
+                    stop_event.set()
+                else:
+                    print(f"[STT] Live: {transcript}", end="\r")
 
-            responses = self.client.streaming_recognize(
-                config=streaming_config,
-                requests=self._request_generator(),
-            )
+        except Exception as e:
+            if not stop_event.is_set():
+                print(f"[STT] Response Error: {e}")
 
-            t = threading.Thread(target=response_loop, args=(responses,), daemon=True)
-            t.start()
+    # ------------------------------------------------------------
+    # Google config
+    # ------------------------------------------------------------
+    config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=SAMPLE_RATE,
+        language_code=LANGUAGE_CODE,
+        enable_automatic_punctuation=True,
+    )
 
-            while not self._stop_event.is_set():
-                time.sleep(0.1)
-                if time.time() - self._last_speech_time > SILENCE_THRESHOLD:
-                    log("STT", "-", f"Silence detected ({SILENCE_THRESHOLD}s)")
-                    self._stop_event.set()
+    streaming_config = speech.StreamingRecognitionConfig(
+        config=config,
+        interim_results=True,
+        single_utterance=True,  # CRITICAL
+    )
 
-            t.join(timeout=1.0)
+    # ------------------------------------------------------------
+    # Start streaming
+    # ------------------------------------------------------------
+    start_time = time.time()
 
-        return " ".join(full_transcript)
+    with sd.InputStream(
+        samplerate=SAMPLE_RATE,
+        channels=CHANNELS,
+        dtype="int16",
+        callback=audio_callback,
+    ):
+        print("[STT] Listening...")
 
-_manager = STTManager()
+        responses = speech_client.streaming_recognize(
+            config=streaming_config,
+            requests=request_generator(),
+        )
 
-def listen(duration=5):
-    return _manager.listen(duration)
+        t = threading.Thread(
+            target=response_loop,
+            args=(responses,),
+            daemon=True,
+        )
+        t.start()
 
-def listen_continuous():
-    return _manager.listen_continuous()
+        # --------------------------------------------------------
+        # HARD TIMEOUT WATCHDOG
+        # --------------------------------------------------------
+        while not stop_event.is_set():
+            time.sleep(0.1)
+            if time.time() - start_time > MAX_LISTEN_SECONDS:
+                print("\n[STT] No speech detected (timeout).")
+                stop_event.set()
+
+        t.join(timeout=1.0)
+
+    final_text = " ".join(transcript_parts).strip()
+
+    if not final_text:
+        log("STT", "-", "Fallback triggered (silence)", MAX_LISTEN_SECONDS)
+        return FALLBACK_TEXT
+
+    log("STT", "-", f"Heard '{final_text}'", round(time.time() - start_time, 2))
+    return final_text
