@@ -1,0 +1,60 @@
+# /etc/systemd/system/drishtikon.service
+[Unit]
+Description=Drishtikon Main Controller
+After=network.target sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+
+# ------------------------------------------------
+# Run as your user (REQUIRED for audio & GPIO)
+# ------------------------------------------------
+User=soham510
+Group=audio
+
+# ------------------------------------------------
+# Scheduling & priority (SAFE for systemd)
+# ------------------------------------------------
+Nice=-10
+
+# ------------------------------------------------
+# Audio session environment (CRITICAL)
+# ------------------------------------------------
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_RUNTIME_PATH=/run/user/1000/pulse
+
+# USB audio device (current setup)
+Environment=ALSA_CARD=H340
+Environment=ALSA_PCM_CARD=H340
+
+# ------------------------------------------------
+# Project execution
+# ------------------------------------------------
+WorkingDirectory=/home/soham510/drishtikon-latest-implementation
+ExecStart=/home/soham510/drishtikon-latest-implementation/venv/bin/python -m main_controller
+
+# ------------------------------------------------
+# Embedded-style reliability
+# ------------------------------------------------
+Restart=always
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStartSec=30
+TimeoutStopSec=10
+WatchdogSec=0
+
+# ------------------------------------------------
+# Environment safety
+# ------------------------------------------------
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/soham510/drishtikon-latest-implementation/venv/bin:/usr/bin:/bin
+
+# ------------------------------------------------
+# Logging
+# ------------------------------------------------
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
