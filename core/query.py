@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import google.generativeai as genai
 
 from core.tts import speak
 from core.logger import log
@@ -11,8 +10,9 @@ from core.utils import timeit
 # ================================================================
 # GEMINI CONFIG
 # ================================================================
-init_gemini()
+query_client = init_gemini()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+
 # ================================================================
 # QUERY FUNCTION
 # ================================================================
@@ -22,25 +22,28 @@ def answer_query(text: str, question: str) -> str:
     Answers from a block of text using Gemini.
     Returns answer string.
     """
-
+    
     if not text or len(text.strip()) == 0:
         return "No text provided."
 
     prompt = f"""
-    You are a query resolver. 
-    The user has asked, {question}.
-    Answer the question clearly and concisely
-    by referring the following text only, in less than 50 words.
+You are a query resolver.
+The user has asked: {question}
 
-    TEXT:
-    \"\"\"{text}\"\"\"
-    """
+Answer the question clearly and concisely
+by referring to the following text only, in less than 50 words.
+
+TEXT:
+\"\"\"{text}\"\"\"
+"""
 
     t0 = time.time()
-    model = genai.GenerativeModel(GEMINI_MODEL)
 
     try:
-        response = model.generate_content(prompt)
+        response = query_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
     except Exception as e:
         log("ANSWER", "-", f"Gemini error: {e}")
         speak(f"Gemini error: {e}")
@@ -52,22 +55,3 @@ def answer_query(text: str, question: str) -> str:
     log("ANSWER", "-", f"{len(answer_text)} chars in {duration}s")
 
     return answer_text
-
-
-# ================================================================
-# CLI MODE (python query.py "text here")
-# ================================================================
-if __name__ == "__main__":
-
-    if len(sys.argv) < 3:
-        print("\nUsage:")
-        print("   python -m core.query \"your question here\" \"text:\"\"your text here\"")
-        print("Or import answer_query() inside another script.\n")
-        sys.exit(0)
-
-    input_question, input_text = " ".join(sys.argv[1:]).split("text:", 1)
-    output = answer_query(input_text, input_question)
-
-    print("\n===== ANSWER =====\n")
-    print(output)
-    print("\n===================\n")

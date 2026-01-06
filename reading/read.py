@@ -11,7 +11,7 @@ from tkinter import filedialog
 from PIL import Image
 import io
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 
 from core.config import init_gemini
 from core.constants import RESULTS_DIR, AUDIO_DIR, PROMPT_CACHE_DIR, READING_INPUTS_DIR, SENTENCE_CACHE_DIR, SUMMARY_CACHE_DIR

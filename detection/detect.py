@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import filedialog
 from PIL import Image
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 
 from core.stt import listen_continuous
 from core.stt_commands import helper_for_exit
@@ -36,7 +36,7 @@ def poll_button_event():
     return None
 
 # ================================================================
-# GEMINI CONFIG
+# GEMINI CONFIG (NEW SDK)
 # ================================================================
 load_credential_path("detection", "detect-key.json")
 
@@ -46,7 +46,8 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY not set")
 
-genai.configure(api_key=GEMINI_API_KEY)
+# Create ONE client
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ================================================================
 # GEMINI PROMPT (VERY IMPORTANT)
@@ -58,9 +59,6 @@ Focus on obstacles, people, vehicles, or hazards.
 Be concise and calm.
 """
 
-# ================================================================
-# GEMINI SCENE SUMMARY
-# ================================================================
 @timeit("[DUMMY DETECTION GEMINI SCENE SUMMARY]")
 def gemini_scene_summary(image_path: str, user_query: str = None) -> str:
     img = Image.open(image_path)
@@ -84,13 +82,21 @@ def gemini_scene_summary(image_path: str, user_query: str = None) -> str:
         "LESS THAN 60 WORDS."
     )
 
-    model = genai.GenerativeModel(GEMINI_MODEL)
-    response = model.generate_content(
-        [
-            {"mime_type": "image/jpeg", "data": buf.getvalue()},
-            user_query,
-        ]
-    )
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {"mime_type": "image/jpeg", "data": buf.getvalue()},
+                        {"text": user_query},
+                    ],
+                }
+            ],
+        )
+    except Exception as e:
+        return f"Gemini error: {e}"
 
     return getattr(response, "text", "I could not understand the scene.")
 

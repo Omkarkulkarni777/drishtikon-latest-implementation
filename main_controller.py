@@ -201,7 +201,7 @@ def main():
         # -----------------------------
         # READING
         # -----------------------------
-        if "read" in cmd or "weird" in cmd or "book" in cmd:
+        if "read" in cmd or "weird" in cmd or "book" in cmd or "reed" in cmd or "creed" in cmd:
             play(tts_main, opening_reading_p)
             start_module("reading.read", "reading")
 

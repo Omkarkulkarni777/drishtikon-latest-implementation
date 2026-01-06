@@ -1,0 +1,24 @@
+python -m venv venv
+source venv/bin/activate
+pip install gpiozero
+sudo apt update
+sudo apt install swig python3-dev
+sudo apt install -y liblgpio-dev
+pip install --no-cache-dir lgpio
+pip install numpy
+sudo apt install -y portaudio19-dev
+pip install sounddevice
+pip install soundfile
+pip install google-generativeai
+pip install googlemaps
+pip install google-cloud-speech
+pip install dotenv
+pip install google-cloud-texttospeech
+pip install opencv-python
+pip install pillow
+pip install google-genai
+sudo apt-get install pulseaudio
+pactl list sources short
+pactl set-default-source <source-name>
+pactl list sinks short
+pactl set-default-sink <sink-name>

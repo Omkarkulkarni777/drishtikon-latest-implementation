@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-import google.generativeai as genai
+from google import genai
 from core.config import init_gemini
 from core.tts import speak
 from core.logger import log
@@ -10,7 +10,7 @@ from core.utils import timeit
 # ================================================================
 # GEMINI CONFIG
 # ================================================================
-init_gemini()
+summary_client = init_gemini()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
 
 # ================================================================
@@ -22,23 +22,25 @@ def summarize(text: str) -> str:
     Summarizes a block of text using Gemini.
     Returns summary string.
     """
-
+    
     if not text or len(text.strip()) == 0:
         return "No text provided."
-    
-    prompt = f"""
-    You are an AI summarizer. Summarize the following text clearly and concisely
-    without changing the meaning ({int(len(text) / 4)} words max):
 
-    TEXT:
-    \"\"\"{text}\"\"\"
-    """
+    prompt = f"""
+You are an AI summarizer. Summarize the following text clearly and concisely
+without changing the meaning ({int(len(text) / 4)} words max):
+
+TEXT:
+\"\"\"{text}\"\"\"
+"""
 
     t0 = time.time()
-    model = genai.GenerativeModel(GEMINI_MODEL)
 
     try:
-        response = model.generate_content(prompt)
+        response = summary_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
     except Exception as e:
         log("SUMMARY", "-", f"Gemini error: {e}")
         speak(f"Gemini error: {e}")
@@ -50,7 +52,6 @@ def summarize(text: str) -> str:
     log("SUMMARY", "-", f"{len(summary_text)} chars in {duration}s")
 
     return summary_text
-
 
 # ================================================================
 # CLI MODE (python summarize.py "text here")
