@@ -3,6 +3,7 @@ import cv2
 import io
 import time
 import threading
+import datetime
 import tkinter as tk
 from tkinter import filedialog
 from PIL import Image
@@ -12,11 +13,10 @@ import google.generativeai as genai
 from core.stt import listen_continuous
 from core.stt_commands import helper_for_exit
 from core.utils import absolute_path, ensure_dir, load_credential_path, timeit
-from core.tts import speak
+from core.tts import speak, speak_cached
 from core.tts_player import tts_main
-from core.playback_controls import play, non_blocking_play, wait_for_key
+from core.playback_controls import play, non_blocking_play
 from core.prompts import (
-    select_file_p,
     generating_answer_p,
     exiting_detection_module_p,
     ask_query_intro_p,
@@ -29,11 +29,13 @@ load_dotenv()
 # --------------------------------------------------
 BUTTON_FILE = "/tmp/detection_button"
 
+
 def poll_button_event():
     if os.path.exists(BUTTON_FILE):
         os.remove(BUTTON_FILE)
         return "v"
     return None
+
 
 # ================================================================
 # GEMINI CONFIG
@@ -49,20 +51,22 @@ if not GEMINI_API_KEY:
 genai.configure(api_key=GEMINI_API_KEY)
 
 # ================================================================
-# GEMINI PROMPT (VERY IMPORTANT)
+# GEMINI PROMPT
 # ================================================================
 GEMINI_SCENE_PROMPT = """
+Answer in Marathi.
 You are assisting a visually impaired user.
 Describe only what requires attention right now.
 Focus on obstacles, people, vehicles, or hazards.
 Be concise and calm.
 """
 
+
 # ================================================================
 # GEMINI SCENE SUMMARY
 # ================================================================
-@timeit("[DUMMY DETECTION GEMINI SCENE SUMMARY]")
-def gemini_scene_summary(image_path: str, user_query: str = None) -> str:
+@timeit("[DETECTION GEMINI SCENE SUMMARY]")
+def gemini_scene_summary(image_path: str, user_query: str | None = None) -> str:
     img = Image.open(image_path)
 
     if img.mode == "RGBA":
@@ -73,14 +77,12 @@ def gemini_scene_summary(image_path: str, user_query: str = None) -> str:
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=75)
 
-    if not user_query:
-        user_query = GEMINI_SCENE_PROMPT
-
-    user_query += (
+    prompt = user_query or GEMINI_SCENE_PROMPT
+    prompt += (
         "\nIMAGE DOES NOT HAVE THE USER. "
         "IT IS TAKEN BY THE USER. "
         "IT IS NOT A SELFIE. "
-        "DO NOT include asterisks, quotes, or any formatting. "
+        "DO NOT include formatting. "
         "LESS THAN 60 WORDS."
     )
 
@@ -88,81 +90,79 @@ def gemini_scene_summary(image_path: str, user_query: str = None) -> str:
     response = model.generate_content(
         [
             {"mime_type": "image/jpeg", "data": buf.getvalue()},
-            user_query,
+            prompt,
         ]
     )
 
     return getattr(response, "text", "I could not understand the scene.")
 
+
+# ================================================================
+# CAMERA CAPTURE
+# ================================================================
+def capture_image() -> str:
+    cam = cv2.VideoCapture(0)
+
+    if not cam.isOpened():
+        raise RuntimeError("Camera could not be opened")
+
+    print("[v] Capture image")
+
+    try:
+        while True:
+            key = poll_button_event()
+            if key == "v":
+                ret, frame = cam.read()
+                if not ret:
+                    raise RuntimeError("Failed to capture image")
+
+                img_path = absolute_path(
+                    "results",
+                    "gemini_cache",
+                    "live.jpg",
+                )
+                cv2.imwrite(img_path, frame)
+                play(tts_main, ask_query_intro_p)
+                return img_path
+
+            time.sleep(0.05)
+
+    finally:
+        cam.release()
+
+
 # ================================================================
 # MAIN LOOP
 # ================================================================
-@timeit("[DUMMY DETECTION MAIN]")
+@timeit("[DETECTION MAIN]")
 def main():
     ensure_dir(absolute_path("results", "gemini_cache"))
-    
-    # ------------------------------------------------------------
-    # Image selection
-    # ------------------------------------------------------------
-    cam = cv2.VideoCapture(0)
 
-    print("\n[v] Ask query | [v (and say 'exit')] Quit\n")
+    try:
+        while True:
+            img_path = capture_image()
 
-    while True:
-        # --------------------------------------------------------
-        # Wait for user intent
-        # --------------------------------------------------------
-        key = None
-        while key is None:
-            key = poll_button_event()
-            time.sleep(0.05)
-        # --------------------------------------------------------
-        # Gemini summary
-        # --------------------------------------------------------
-        if key == "v":
-            # --------------------------------------------------------
-            # Capture frame if camera is active
-            # --------------------------------------------------------
-            if cam:
-                ret, frame = cam.read()
-                if not ret:
-                    break
+            user_query = listen_continuous()
 
-                img_path = absolute_path("results", "gemini_cache", "live.jpg")
+            if helper_for_exit(user_query) == "q" or 0 < len(user_query.split()) < 2:
+                play(tts_main, exiting_detection_module_p)
+                return
 
-            try:
-                cv2.imwrite(img_path, frame)
-                play(tts_main, ask_query_intro_p)
+            play(tts_main, generating_answer_p)
 
-                user_query = listen_continuous()
-                if helper_for_exit(user_query) == "q" or len(user_query.split()) < 2:
-                    play(tts_main, exiting_detection_module_p)
-                    break
+            text = gemini_scene_summary(img_path, user_query)
+            audio_path = speak(text)
 
-                play(tts_main, generating_answer_p)
+            non_blocking_play(
+                tts_main,
+                audio_path,
+                module_name="detection",
+                cmd_to_stop_audio_file="Press 's' to stop description",
+            )
 
-                text = gemini_scene_summary(img_path, user_query)
-                audio_path = speak(text)
+    except Exception as e:
+        print(f"[Detection Error] {e}")
 
-                non_blocking_play(
-                    tts_main,
-                    audio_path,
-                    module_name="detection",
-                    cmd_to_stop_audio_file="Press 's' to stop description",
-                )
-
-            except Exception as e:
-                print(f"[Gemini Error] {e}")
-
-        # --------------------------------------------------------
-        # Exit
-        # --------------------------------------------------------
-        else:
-            play(tts_main, exiting_detection_module_p)
-            break
-
-    if cam:
-        cam.release()
 
 # ================================================================
 if __name__ == "__main__":

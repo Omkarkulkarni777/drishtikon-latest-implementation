@@ -116,14 +116,15 @@ def gemini_read(image_path, prompt):
 # CAMERA CAPTURE
 # ================================================================
 def capture_image():
-        # ------------------------------------------------------------
+    # ------------------------------------------------------------
     # Image selection
     # ------------------------------------------------------------
     cam = cv2.VideoCapture(0)
-
-    print("\n[v] Capture image")
-    did_cam_turn_on = False
     
+    read_cap_intro_p = speak_cached("Please press button to capture image", "read_cap_intro.wav")
+    play(tts_main, read_cap_intro_p)
+    print("\n[v] Capture image")
+      
     while True:
         # --------------------------------------------------------
         # Wait for user intent
@@ -138,9 +139,6 @@ def capture_image():
         # Gemini summary
         # --------------------------------------------------------
         if key == "v":
-            if not did_cam_turn_on:
-                did_cam_turn_on = True
-                time.sleep(3)
                 
             # --------------------------------------------------------
             # Capture frame if camera is active

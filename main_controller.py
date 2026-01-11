@@ -11,7 +11,7 @@ from gpiozero import Button, Device
 from gpiozero.pins.lgpio import LGPIOFactory
 
 from core.stt import listen
-from core.tts_player import tts_main
+from core.tts_player import tts_main, select_output
 from core.prompts import *
 from core.priority_audio import AudioPriority, PriorityAudioManager
 
@@ -134,7 +134,7 @@ def linux_stop_listener():
             os.remove("/tmp/stop.txt")
             kill_all_processes()
             time.sleep(1)
-            play(tts_main, emergency_stop_p)
+            play(tts_main, pause_beep)
             state = False
         time.sleep(0.5)
 
@@ -259,6 +259,7 @@ if __name__ == "__main__":
     cleanup_tmp_files()
 
     while True:
+        select_output()
         wait_for_initial_button()
         main()
         cleanup_tmp_files()

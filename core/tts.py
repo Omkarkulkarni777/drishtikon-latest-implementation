@@ -88,7 +88,7 @@ def speak(text: str, is_detection: bool=False):
     synthesis_input = texttospeech.SynthesisInput(text=text)
 
     voice = texttospeech.VoiceSelectionParams(
-        language_code="en-IN",
+        language_code="hi-IN",
         ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL,
     )
 

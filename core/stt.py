@@ -15,9 +15,10 @@ from core.logger import log
 # ================================================================
 #  CONFIG
 # ================================================================
-LANGUAGE_CODE = "en-IN"
-FALLBACK_TEXT = ""
-MAX_LISTEN_SECONDS = 6  # hard wall-clock timeout
+LANGUAGE_CODE_IN = "en-IN"
+LANGUAGE_CODE =  "en-US"
+LANGUAGE_CODE_HI_IN = "hi-IN"
+MAX_LISTEN_SECONDS = 30  # hard wall-clock timeout
 
 # ================================================================
 #  GOOGLE CREDENTIALS
@@ -93,7 +94,7 @@ def listen(duration=5):
     if not text:
         log("STT", "-", "No speech detected (fallback)", elapsed)
         print("[STT] No speech detected.")
-        return FALLBACK_TEXT
+        return
 
     log("STT", "-", f"Heard '{text}'", elapsed)
     print("[STT] Heard:", text)
@@ -103,7 +104,7 @@ def listen(duration=5):
 # ================================================================
 #  STREAMING STT (PRIMARY PATH)
 # ================================================================
-def listen_continuous():
+def listen_continuous(language_code_input="en-IN"):
     """
     Streaming STT with:
     - Google-managed end-of-speech
@@ -112,7 +113,7 @@ def listen_continuous():
     """
 
     if not speech_client:
-        return FALLBACK_TEXT
+        return
 
     audio_queue = queue.Queue()
     stop_event = threading.Event()
@@ -169,7 +170,7 @@ def listen_continuous():
     config = speech.RecognitionConfig(
         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
         sample_rate_hertz=SAMPLE_RATE,
-        language_code=LANGUAGE_CODE,
+        language_code=language_code_input,
         enable_automatic_punctuation=True,
     )
 
@@ -219,7 +220,7 @@ def listen_continuous():
 
     if not final_text:
         log("STT", "-", "Fallback triggered (silence)", MAX_LISTEN_SECONDS)
-        return FALLBACK_TEXT
+        return
 
     log("STT", "-", f"Heard '{final_text}'", round(time.time() - start_time, 2))
     return final_text

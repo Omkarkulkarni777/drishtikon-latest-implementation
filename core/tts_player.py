@@ -13,6 +13,19 @@ import threading
 import sounddevice as sd
 import soundfile as sf
 
+def select_output():
+    for i, dev in enumerate(sd.query_devices()):
+        if dev["name"] == "pulse" and dev["max_output_channels"] > 0:
+            sd.default.device = (None, i)
+            sd.default.samplerate = int(dev["default_samplerate"])
+            sd.default.channels = 2
+            print(f"[TTS] Using PulseAudio output (index {i})")
+            return
+
+    # Fallback: default device (never crash)
+    sd.default.device = None
+    print("[TTS] PulseAudio not found, using default output")
+
 
 class TTSPlayer:
     def __init__(self):
